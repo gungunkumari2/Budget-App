@@ -1,0 +1,65 @@
+from django.shortcuts import render
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.parsers import MultiPartParser, FormParser
+import tempfile
+import os
+from PIL import Image
+import pytesseract
+import pandas as pd
+
+try:
+    import easyocr
+    easyocr_reader = easyocr.Reader(['en'])
+except ImportError:
+    easyocr_reader = None
+
+try:
+    from pdf2image import convert_from_path
+except ImportError:
+    convert_from_path = None
+
+# Create your views here.
+
+class UploadReceiptView(APIView):
+    parser_classes = (MultiPartParser, FormParser)
+
+    def post(self, request, *args, **kwargs):
+        file_obj = request.FILES.get('file')
+        if not file_obj:
+            return Response({'error': 'No file uploaded.'}, status=status.HTTP_400_BAD_REQUEST)
+        suffix = os.path.splitext(file_obj.name)[1].lower()
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            for chunk in file_obj.chunks():
+                tmp.write(chunk)
+            tmp_path = tmp.name
+        try:
+            if suffix in ['.jpg', '.jpeg', '.png']:
+                image = Image.open(tmp_path)
+                text = pytesseract.image_to_string(image)
+                if easyocr_reader:
+                    easyocr_text = "\n".join([line[1] for line in easyocr_reader.readtext(tmp_path)])
+                    text += f"\n(EasyOCR)\n{easyocr_text}"
+                return Response({'type': 'image', 'text': text.strip()})
+            elif suffix == '.pdf':
+                if convert_from_path is None:
+                    return Response({'error': 'pdf2image not installed'}, status=500)
+                images = convert_from_path(tmp_path)
+                all_text = []
+                for img in images:
+                    text = pytesseract.image_to_string(img)
+                    all_text.append(text)
+                if easyocr_reader:
+                    for img in images:
+                        easyocr_text = "\n".join([line[1] for line in easyocr_reader.readtext(img)])
+                        all_text.append(f"(EasyOCR)\n{easyocr_text}")
+                return Response({'type': 'pdf', 'text': "\n".join(all_text).strip()})
+            elif suffix == '.csv':
+                df = pd.read_csv(tmp_path)
+                data = df.to_dict(orient="records")
+                return Response({'type': 'csv', 'data': data})
+            else:
+                return Response({'error': 'Unsupported file type.'}, status=status.HTTP_400_BAD_REQUEST)
+        finally:
+            os.remove(tmp_path)

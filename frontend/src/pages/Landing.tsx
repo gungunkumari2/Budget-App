@@ -1,8 +1,13 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowRight, Brain, PieChart, TrendingUp, Upload, Zap } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { useState } from "react";
 
 const Landing = () => {
+  const navigate = useNavigate();
+  const [aboutOpen, setAboutOpen] = useState(false);
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-primary/5 to-secondary/10">
       {/* Header */}
@@ -15,13 +20,31 @@ const Landing = () => {
             </span>
           </div>
           <div className="flex items-center space-x-8">
-            <Button variant="ghost" className="text-muted-foreground hover:text-foreground">
-              About
-            </Button>
+            <Dialog open={aboutOpen} onOpenChange={setAboutOpen}>
+              <DialogTrigger asChild>
+                <Button variant="ghost" className="text-muted-foreground hover:text-foreground">About</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>About SmartBudget</DialogTitle>
+                  <DialogDescription>
+                    <span className="block mb-2">SmartBudget is your intelligent financial companion, designed to make managing your money effortless and insightful.</span>
+                    <ul className="list-disc pl-5 space-y-1 text-left">
+                      <li>AI-powered receipt and statement processing</li>
+                      <li>Automatic categorization and spending analysis</li>
+                      <li>Personalized budget recommendations</li>
+                      <li>Beautiful, interactive dashboards</li>
+                      <li>Secure and privacy-focused</li>
+                    </ul>
+                    <span className="block mt-4">Take control of your finances with SmartBudget and unlock smarter ways to save, spend, and grow!</span>
+                  </DialogDescription>
+                </DialogHeader>
+              </DialogContent>
+            </Dialog>
             <Button variant="ghost" className="text-muted-foreground hover:text-foreground">
               Features
             </Button>
-            <Button variant="outline">Sign In</Button>
+            <Button variant="outline" onClick={() => navigate('/signin')}>Sign In</Button>
           </div>
         </div>
       </header>
@@ -44,7 +67,13 @@ const Landing = () => {
       {/* Features Section */}
       <section className="container mx-auto px-4 py-24">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-16 max-w-4xl mx-auto">
-          <div className="text-center space-y-4">
+          <div
+            className="text-center space-y-4 cursor-pointer transition hover:shadow-lg hover:bg-primary/5 rounded-lg p-4"
+            onClick={() => navigate('/upload')}
+            role="button"
+            tabIndex={0}
+            onKeyPress={e => { if (e.key === 'Enter' || e.key === ' ') navigate('/upload'); }}
+          >
             <Upload className="h-8 w-8 text-primary mx-auto" />
             <h3 className="text-lg font-medium">Receipt Processing</h3>
             <p className="text-sm text-muted-foreground leading-relaxed">
