@@ -11,6 +11,7 @@ import BudgetPage from "./pages/BudgetPage";
 import Upload from "./pages/Upload";
 import NotFound from "./pages/NotFound";
 import Signin from "./pages/Signin";
+import AIChatWidget from './components/AIChatWidget';
 
 const queryClient = new QueryClient();
 
@@ -56,6 +57,7 @@ const App = () => (
           {/* Catch-all route */}
           <Route path="*" element={<NotFound />} />
         </Routes>
+        <AIChatWidget />
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

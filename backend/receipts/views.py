@@ -8,6 +8,10 @@ import os
 from PIL import Image
 import pytesseract
 import pandas as pd
+import traceback
+from rest_framework import generics
+from .models import Transaction
+from .serializers import TransactionSerializer
 
 try:
     import easyocr
@@ -61,5 +65,14 @@ class UploadReceiptView(APIView):
                 return Response({'type': 'csv', 'data': data})
             else:
                 return Response({'error': 'Unsupported file type.'}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            # Print traceback to server log and return it in the response for debugging
+            tb = traceback.format_exc()
+            print(f"Error in upload-receipt: {tb}")
+            return Response({'error': str(e), 'traceback': tb}, status=500)
         finally:
             os.remove(tmp_path)
+
+class TransactionListView(generics.ListAPIView):
+    queryset = Transaction.objects.all().order_by('-date')
+    serializer_class = TransactionSerializer
