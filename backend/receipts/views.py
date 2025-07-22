@@ -45,7 +45,11 @@ class UploadReceiptView(APIView):
                 if easyocr_reader:
                     easyocr_text = "\n".join([line[1] for line in easyocr_reader.readtext(tmp_path)])
                     text += f"\n(EasyOCR)\n{easyocr_text}"
-                return Response({'type': 'image', 'text': text.strip()})
+                # Save the extracted text as a Transaction
+                transaction = Transaction.objects.create(
+                    description=text.strip()
+                )
+                return Response({'type': 'image', 'text': text.strip(), 'transaction_id': transaction.id})
             elif suffix == '.pdf':
                 if convert_from_path is None:
                     return Response({'error': 'pdf2image not installed'}, status=500)
@@ -58,15 +62,26 @@ class UploadReceiptView(APIView):
                     for img in images:
                         easyocr_text = "\n".join([line[1] for line in easyocr_reader.readtext(img)])
                         all_text.append(f"(EasyOCR)\n{easyocr_text}")
-                return Response({'type': 'pdf', 'text': "\n".join(all_text).strip()})
+                full_text = "\n".join(all_text).strip()
+                transaction = Transaction.objects.create(
+                    description=full_text
+                )
+                return Response({'type': 'pdf', 'text': full_text, 'transaction_id': transaction.id})
             elif suffix == '.csv':
                 df = pd.read_csv(tmp_path)
                 data = df.to_dict(orient="records")
+                # Create a Transaction for each row
+                for row in data:
+                    Transaction.objects.create(
+                        description=str(row),
+                        amount=row.get('amount'),
+                        category=row.get('category', ''),
+                        date=row.get('date')
+                    )
                 return Response({'type': 'csv', 'data': data})
             else:
                 return Response({'error': 'Unsupported file type.'}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            # Print traceback to server log and return it in the response for debugging
             tb = traceback.format_exc()
             print(f"Error in upload-receipt: {tb}")
             return Response({'error': str(e), 'traceback': tb}, status=500)
