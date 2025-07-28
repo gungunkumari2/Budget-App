@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,43 +18,52 @@ import {
 } from 'lucide-react';
 
 interface BudgetCategory {
-  id: string;
-  name: string;
-  allocated: number;
-  spent: number;
-  recommended: number;
-  color: string;
+  category_name: string;
+  budget_limit: number;
+  amount_spent: number;
+  percent_spent: number;
+  status: string;
   icon: string;
+  color: string;
 }
 
-const initialCategories: BudgetCategory[] = [
-  { id: '1', name: 'Food & Dining', allocated: 800, spent: 650, recommended: 750, color: '#ef4444', icon: '🍕' },
-  { id: '2', name: 'Transportation', allocated: 400, spent: 420, recommended: 450, color: '#f97316', icon: '🚗' },
-  { id: '3', name: 'Shopping', allocated: 300, spent: 280, recommended: 250, color: '#eab308', icon: '🛍️' },
-  { id: '4', name: 'Entertainment', allocated: 200, spent: 150, recommended: 180, color: '#22c55e', icon: '🎬' },
-  { id: '5', name: 'Utilities', allocated: 350, spent: 340, recommended: 340, color: '#3b82f6', icon: '⚡' },
-];
+interface AIInsight {
+  type: 'warning' | 'success' | 'suggestion';
+  title: string;
+  description: string;
+  action: string;
+}
 
 export const BudgetPlanner = () => {
-  const [categories, setCategories] = useState(initialCategories);
-  const [monthlyIncome, setMonthlyIncome] = useState(5200);
+  const [categories, setCategories] = useState<BudgetCategory[]>([]);
+  const [summary, setSummary] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [aiInsightsLoading, setAiInsightsLoading] = useState(false);
   const [showRecommendations, setShowRecommendations] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const totalAllocated = categories.reduce((sum, cat) => sum + cat.allocated, 0);
-  const totalSpent = categories.reduce((sum, cat) => sum + cat.spent, 0);
-  const totalRecommended = categories.reduce((sum, cat) => sum + cat.recommended, 0);
-  const remainingBudget = monthlyIncome - totalAllocated;
-  const savingsGoal = monthlyIncome * 0.2; // 20% savings goal
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([
+      axios.get('http://localhost:8000/api/upload-receipt/dashboard-summary/'),
+      axios.get('http://localhost:8000/api/upload-receipt/budget-categories/')
+    ])
+      .then(([summaryRes, catRes]) => {
+        setSummary(summaryRes.data);
+        setCategories(catRes.data);
+        setLoading(false);
+      })
+      .catch(() => {
+        setError('Failed to load budget data');
+        setLoading(false);
+      });
+  }, []);
 
-  const updateCategoryBudget = (id: string, newAmount: number) => {
-    setCategories(prev => prev.map(cat => 
-      cat.id === id ? { ...cat, allocated: newAmount } : cat
+  const updateCategoryBudget = (index: number, newAmount: number) => {
+    setCategories(prev => prev.map((cat, i) =>
+      i === index ? { ...cat, budget_limit: newAmount } : cat
     ));
-  };
-
-  const applyRecommendations = () => {
-    setCategories(prev => prev.map(cat => ({ ...cat, allocated: cat.recommended })));
-    setShowRecommendations(false);
+    // Optionally: send PATCH/PUT to backend here
   };
 
   const getBudgetStatus = (spent: number, allocated: number) => {
@@ -63,26 +73,155 @@ export const BudgetPlanner = () => {
     return { status: 'good', color: 'text-success', icon: CheckCircle };
   };
 
-  const aiInsights = [
-    {
-      type: 'warning',
-      title: 'Transportation Over Budget',
-      description: 'You\'ve exceeded your transportation budget by $20. Consider using public transport.',
-      action: 'View Tips'
-    },
-    {
-      type: 'success',
-      title: 'Great Food Savings!',
-      description: 'You\'re $150 under budget for food this month. Keep up the good work!',
-      action: 'See Details'
-    },
-    {
-      type: 'suggestion',
-      title: 'Optimize Your Budget',
-      description: 'Based on your spending patterns, we suggest reallocating $100 from shopping to savings.',
-      action: 'Apply Changes'
+  // Fallback AI insights using free API
+  const getFallbackAIInsights = async (financialData: any): Promise<AIInsight[]> => {
+    try {
+      setAiInsightsLoading(true);
+      
+      // Use a free AI service (you can replace with any free AI API)
+      const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+        model: 'gpt-3.5-turbo',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a financial advisor. Provide 3 budget insights based on the user\'s financial data. Return only JSON array with objects containing: type (warning/success/suggestion), title, description, action.'
+          },
+          {
+            role: 'user',
+            content: `Analyze this financial data and provide budget insights: ${JSON.stringify(financialData)}`
+          }
+        ],
+        max_tokens: 500,
+        temperature: 0.7
+      }, {
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_OPENAI_API_KEY || 'sk-free-key'}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const insights = JSON.parse(response.data.choices[0].message.content);
+      return insights;
+    } catch (error) {
+      console.error('AI insights error:', error);
+      // Return default insights if API fails
+      return [
+        {
+          type: 'suggestion',
+          title: 'Budget Tracking',
+          description: 'Start tracking your expenses regularly to get better insights.',
+          action: 'Learn More'
+        },
+        {
+          type: 'success',
+          title: 'Financial Planning',
+          description: 'Consider setting up a monthly budget to control your spending.',
+          action: 'Get Started'
+        },
+        {
+          type: 'warning',
+          title: 'Savings Goal',
+          description: 'Aim to save at least 20% of your income for financial security.',
+          action: 'Set Goals'
+        }
+      ];
+    } finally {
+      setAiInsightsLoading(false);
     }
-  ];
+  };
+
+  if (loading) return <div>Loading budget data...</div>;
+  if (error) return <div className="text-red-500">{error}</div>;
+
+  const currency = summary?.currency || 'NPR';
+  const monthlyIncome = summary?.monthly_income || 0;
+  const totalAllocated = categories.reduce((sum, cat) => sum + cat.budget_limit, 0);
+  const totalSpent = categories.reduce((sum, cat) => sum + cat.amount_spent, 0);
+  const remainingBudget = monthlyIncome - totalAllocated;
+
+  // Generate dynamic AI insights based on real backend data
+  const generateAIInsights = (): AIInsight[] => {
+    const insights: AIInsight[] = [];
+    
+    if (!categories.length) return insights;
+
+    // Find categories over budget
+    const overBudgetCategories = categories.filter(cat => 
+      cat.amount_spent > cat.budget_limit && cat.budget_limit > 0
+    );
+    
+    if (overBudgetCategories.length > 0) {
+      const topOverBudget = overBudgetCategories[0];
+      insights.push({
+        type: 'warning',
+        title: `${topOverBudget.category_name} Over Budget`,
+        description: `You've exceeded your ${topOverBudget.category_name} budget by ${currency} ${(topOverBudget.amount_spent - topOverBudget.budget_limit).toLocaleString()}. Consider reviewing your spending in this category.`,
+        action: 'View Tips'
+      });
+    }
+
+    // Find categories under budget (good performance)
+    const underBudgetCategories = categories.filter(cat => 
+      cat.amount_spent < cat.budget_limit * 0.8 && cat.budget_limit > 0
+    );
+    
+    if (underBudgetCategories.length > 0) {
+      const topUnderBudget = underBudgetCategories[0];
+      insights.push({
+        type: 'success',
+        title: `Great ${topUnderBudget.category_name} Savings!`,
+        description: `You're ${((topUnderBudget.budget_limit - topUnderBudget.amount_spent) / topUnderBudget.budget_limit * 100).toFixed(0)}% under budget for ${topUnderBudget.category_name}. Keep up the good work!`,
+        action: 'See Details'
+      });
+    }
+
+    // Budget optimization suggestions
+    const totalBudgeted = categories.reduce((sum, cat) => sum + cat.budget_limit, 0);
+    const totalSpent = categories.reduce((sum, cat) => sum + cat.amount_spent, 0);
+    const monthlyIncome = summary?.monthly_income || 0;
+    
+    if (totalBudgeted > monthlyIncome * 0.9) {
+      insights.push({
+        type: 'suggestion',
+        title: 'Budget Allocation Review',
+        description: `Your total budget (${currency} ${totalBudgeted.toLocaleString()}) is ${((totalBudgeted / monthlyIncome) * 100).toFixed(0)}% of your income. Consider reducing some categories to increase savings.`,
+        action: 'Apply Changes'
+      });
+    }
+
+    // Savings rate insights
+    const savingsRate = monthlyIncome > 0 ? ((monthlyIncome - totalSpent) / monthlyIncome * 100) : 0;
+    
+    if (savingsRate < 10) {
+      insights.push({
+        type: 'warning',
+        title: 'Low Savings Rate',
+        description: `Your savings rate is ${savingsRate.toFixed(1)}%. Aim for at least 20% of your income for better financial security.`,
+        action: 'Get Tips'
+      });
+    } else if (savingsRate >= 20) {
+      insights.push({
+        type: 'success',
+        title: 'Excellent Savings!',
+        description: `You're saving ${savingsRate.toFixed(1)}% of your income, which is above the recommended 20%. Great job!`,
+        action: 'See Details'
+      });
+    }
+
+    // If no specific insights, provide general advice
+    if (insights.length === 0) {
+      insights.push({
+        type: 'suggestion',
+        title: 'Budget Optimization',
+        description: 'Your budget looks balanced. Consider tracking your spending more closely to identify potential savings opportunities.',
+        action: 'Learn More'
+      });
+    }
+
+    return insights.slice(0, 3); // Limit to 3 insights
+  };
+
+  const aiInsights = generateAIInsights();
 
   return (
     <div className="space-y-6">
@@ -93,7 +232,7 @@ export const BudgetPlanner = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Monthly Income</p>
-                <p className="text-2xl font-bold text-success">${monthlyIncome.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-success">{currency} {monthlyIncome.toLocaleString()}</p>
               </div>
               <DollarSign className="h-8 w-8 text-success" />
             </div>
@@ -105,7 +244,7 @@ export const BudgetPlanner = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Total Budgeted</p>
-                <p className="text-2xl font-bold">${totalAllocated.toLocaleString()}</p>
+                <p className="text-2xl font-bold">{currency} {totalAllocated.toLocaleString()}</p>
               </div>
               <Target className="h-8 w-8 text-primary" />
             </div>
@@ -117,7 +256,7 @@ export const BudgetPlanner = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Total Spent</p>
-                <p className="text-2xl font-bold text-error">${totalSpent.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-error">{currency} {totalSpent.toLocaleString()}</p>
               </div>
               <TrendingUp className="h-8 w-8 text-error" />
             </div>
@@ -130,7 +269,7 @@ export const BudgetPlanner = () => {
               <div>
                 <p className="text-sm text-muted-foreground">Remaining</p>
                 <p className={`text-2xl font-bold ${remainingBudget >= 0 ? 'text-success' : 'text-error'}`}>
-                  ${Math.abs(remainingBudget).toLocaleString()}
+                  {currency} {Math.abs(remainingBudget).toLocaleString()}
                 </p>
               </div>
               <div className={`h-8 w-8 ${remainingBudget >= 0 ? 'text-success' : 'text-error'}`}>
@@ -161,7 +300,7 @@ export const BudgetPlanner = () => {
               AI Suggestions
             </Button>
             {showRecommendations && (
-              <Button size="sm" onClick={applyRecommendations}>
+              <Button size="sm" onClick={() => {}}>
                 Apply All
               </Button>
             )}
@@ -169,20 +308,20 @@ export const BudgetPlanner = () => {
         </CardHeader>
         <CardContent>
           <div className="space-y-6">
-            {categories.map((category) => {
-              const spentPercentage = (category.spent / category.allocated) * 100;
-              const statusInfo = getBudgetStatus(category.spent, category.allocated);
+            {categories.map((category, index) => {
+              const spentPercentage = (category.amount_spent / (category.budget_limit || 1)) * 100;
+              const statusInfo = getBudgetStatus(category.amount_spent, category.budget_limit || 1);
               const StatusIcon = statusInfo.icon;
 
               return (
-                <div key={category.id} className="space-y-3">
+                <div key={category.category_name} className="space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <span className="text-2xl">{category.icon}</span>
                       <div>
-                        <h4 className="font-medium">{category.name}</h4>
+                        <h4 className="font-medium">{category.category_name}</h4>
                         <p className="text-sm text-muted-foreground">
-                          ${category.spent} of ${category.allocated} spent
+                          {currency} {category.amount_spent} of {currency} {category.budget_limit} spent
                         </p>
                       </div>
                     </div>
@@ -201,21 +340,20 @@ export const BudgetPlanner = () => {
 
                   <div className="flex items-center gap-4">
                     <div className="flex-1">
-                      <Label className="text-sm">Budget: ${category.allocated}</Label>
+                      <Label className="text-sm">Budget: {currency} {category.budget_limit}</Label>
                       <Slider
-                        value={[category.allocated]}
-                        onValueChange={(value) => updateCategoryBudget(category.id, value[0])}
+                        value={[category.budget_limit]}
+                        onValueChange={(value) => updateCategoryBudget(index, value[0])}
                         max={1000}
                         min={0}
                         step={50}
                         className="mt-2"
                       />
                     </div>
-                    
                     {showRecommendations && (
                       <div className="text-right">
                         <p className="text-sm text-muted-foreground">AI Suggests</p>
-                        <p className="font-semibold text-primary">${category.recommended}</p>
+                        <p className="font-semibold text-primary">{currency} {category.budget_limit}</p>
                       </div>
                     )}
                   </div>

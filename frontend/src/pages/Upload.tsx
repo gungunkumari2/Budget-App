@@ -1,4 +1,5 @@
 import { ReceiptUpload } from '@/components/ReceiptUpload';
+import TransactionList from '@/components/TransactionList';
 
 const Upload = () => {
   return (
@@ -12,6 +13,9 @@ const Upload = () => {
         </p>
       </div>
       <ReceiptUpload />
+      <div className="mt-8">
+        <TransactionList />
+      </div>
     </div>
   );
 };
