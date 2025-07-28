@@ -11,19 +11,43 @@ export const ExpenseChart = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setLoading(true);
-    axios.get('http://localhost:8000/api/upload-receipt/budget-categories/')
-      .then(res => {
+    const fetchCategories = async () => {
+      setLoading(true);
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          setError('Authentication required. Please log in again.');
+          setLoading(false);
+          return;
+        }
+
+        const config = {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        };
+
+        const res = await axios.get('http://localhost:8000/api/upload-receipt/budget-categories/', config);
         setCategories(res.data);
         if (res.data.length > 0 && res.data[0].currency) {
           setCurrency(res.data[0].currency);
         }
         setLoading(false);
-      })
-      .catch(() => {
-        setError('Failed to load expense breakdown');
+      } catch (err: any) {
+        console.error('Categories fetch error:', err);
+        if (err.response?.status === 401) {
+          setError('Authentication expired. Please log in again.');
+          // Clear invalid token
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+        } else {
+          setError('Failed to load expense breakdown');
+        }
         setLoading(false);
-      });
+      }
+    };
+
+    fetchCategories();
   }, []);
 
   if (loading) return <div>Loading expense breakdown...</div>;
@@ -48,15 +72,15 @@ export const ExpenseChart = () => {
           </div>
           <div className="w-full space-y-3">
             {categories.map((cat, i) => (
-              <div key={i} className="flex items-center justify-between border-b pb-2 last:border-b-0">
+              <div key={`category-${i}-${cat.name}`} className="flex items-center justify-between border-b pb-2 last:border-b-0">
                 <div className="flex items-center gap-3">
                   <span className="w-3 h-3 rounded-full" style={{ backgroundColor: cat.color }}></span>
-                  <span className="font-medium">{cat.category_name}</span>
+                  <span className="font-medium">{cat.name}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="font-semibold">{currency} {cat.amount_spent}</span>
-                  <Badge variant={cat.status === 'danger' ? 'destructive' : cat.status === 'warning' ? 'secondary' : 'default'}>
-                    {cat.percent_spent}%
+                  <Badge variant={cat.status === 'over' ? 'destructive' : cat.status === 'normal' ? 'default' : 'secondary'}>
+                    {cat.percentage_used}%
                   </Badge>
                 </div>
               </div>

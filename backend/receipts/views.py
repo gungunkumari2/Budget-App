@@ -19,6 +19,11 @@ from .serializers import MonthlyIncomeSerializer
 from django.utils import timezone
 from django.db import models
 from django.db.models.functions import TruncMonth
+from django.contrib.auth import authenticate, login as django_login
+from django.contrib.auth.models import User
+from django.contrib.auth.hashers import make_password
+from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.tokens import RefreshToken
 
 try:
     import easyocr
@@ -57,6 +62,7 @@ class UploadReceiptView(APIView):
                     easyocr_text = "\n".join([line[1] for line in easyocr_reader.readtext(tmp_path)])
                     text += f"\n(EasyOCR)\n{easyocr_text}"
                 transaction = Transaction.objects.create(
+                    user=request.user,
                     file=file_obj,
                     description=text.strip()
                 )
@@ -80,6 +86,7 @@ class UploadReceiptView(APIView):
                         all_text.append(f"(EasyOCR)\n{easyocr_text}")
                 full_text = "\n".join(all_text).strip()
                 transaction = Transaction.objects.create(
+                    user=request.user,
                     file=file_obj,
                     description=full_text
                 )
@@ -94,55 +101,42 @@ class UploadReceiptView(APIView):
                 data = df.to_dict(orient="records")
                 for row in data:
                     Transaction.objects.create(
+                        user=request.user,
                         file=file_obj,
                         description=str(row),
                         amount=row.get('amount'),
                         category=row.get('category', ''),
-                        date=row.get('date')
+                        date=row.get('date', date.today())
                     )
-                return Response({'type': 'csv', 'data': data})
-
-            # Handle Excel files (optional)
-            elif suffix in ['.xlsx', '.xls']:
-                try:
-                    df = pd.read_excel(tmp_path)
-                except Exception as e:
-                    return Response({'error': f'Excel parsing failed: {str(e)}'}, status=400)
-                data = df.to_dict(orient="records")
-                for row in data:
-                    Transaction.objects.create(
-                        file=file_obj,
-                        description=str(row),
-                        amount=row.get('amount'),
-                        category=row.get('category', ''),
-                        date=row.get('date')
-                    )
-                return Response({'type': 'excel', 'data': data})
+                return Response({'type': 'csv', 'message': f'Processed {len(data)} transactions from CSV'})
 
             else:
-                return Response({'error': f'Unsupported file type: {suffix}'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'Unsupported file type. Please upload JPG, PNG, PDF, or CSV files.'}, status=400)
+
         except Exception as e:
-            tb = traceback.format_exc()
-            print(f"Error in upload-receipt: {tb}")
-            return Response({'error': str(e), 'traceback': tb}, status=500)
+            return Response({'error': f'Processing failed: {str(e)}'}, status=500)
         finally:
-            os.remove(tmp_path)
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
 
 class TransactionListView(generics.ListAPIView):
-    queryset = Transaction.objects.all().order_by('-date')
     serializer_class = TransactionSerializer
+    
+    def get_queryset(self):
+        return Transaction.objects.filter(user=self.request.user).order_by('-date')
 
 class CategoryTotalsView(APIView):
     def get(self, request):
-        year = request.GET.get('year', date.today().year)
-        data = (
-            Transaction.objects
-            .filter(date__year=year)
-            .values('category')
-            .annotate(total=Sum('amount'))
-            .order_by('-total')
-        )
-        return Response(list(data))
+        categories = Category.objects.all()
+        category_totals = []
+        for category in categories:
+            total = Expense.objects.filter(category=category).aggregate(total=Sum('amount'))['total'] or 0
+            category_totals.append({
+                'category': category.name,
+                'total': total,
+                'color': category.color
+            })
+        return Response(category_totals)
 
 class BudgetListView(generics.ListAPIView):
     queryset = Budget.objects.all()
@@ -150,197 +144,266 @@ class BudgetListView(generics.ListAPIView):
 
 class MonthlyIncomeView(generics.ListAPIView):
     serializer_class = MonthlyIncomeSerializer
-    def get_queryset(self):
-        user = self.request.user if self.request.user.is_authenticated else None
-        now = timezone.now()
-        return MonthlyIncome.objects.filter(user=user, month=now.month, year=now.year) or MonthlyIncome.objects.all()
 
-# --- Budget Summary Endpoint ---
+    def get_queryset(self):
+        return MonthlyIncome.objects.filter(month=timezone.now().month, year=timezone.now().year)
+
 class BudgetSummaryView(APIView):
     def get(self, request):
         now = timezone.now()
-        monthly_income = MonthlyIncome.objects.filter(
-            month=now.month, year=now.year
-        ).aggregate(total=Sum('amount'))['total'] or 0
-
-        total_expenses = Expense.objects.filter(
-            date__year=now.year, date__month=now.month
-        ).aggregate(total=Sum('amount'))['total'] or 0
-
-        saving_rate = ((monthly_income - total_expenses) / monthly_income * 100) if monthly_income else 0
-
-        total_budgeted = Budget.objects.aggregate(total=Sum('amount'))['total'] or 0
-        budget_score = 100
-        if total_budgeted:
-            percent_spent = (total_expenses / total_budgeted) * 100
-            budget_score = max(0, 100 - max(0, percent_spent - 100))
-
+        monthly_income = MonthlyIncome.objects.filter(month=now.month, year=now.year).aggregate(total=Sum('amount'))['total'] or 0
+        total_expenses = Expense.objects.filter(date__year=now.year, date__month=now.month).aggregate(total=Sum('amount'))['total'] or 0
+        savings_rate = ((monthly_income - total_expenses) / monthly_income * 100) if monthly_income > 0 else 0
+        
         return Response({
-            "monthly_income": monthly_income,
-            "total_expenses": total_expenses,
-            "saving_rate": round(saving_rate, 2),
-            "budget_score": round(budget_score, 2),
-            "currency": "NPR"
+            'monthly_income': monthly_income,
+            'total_expenses': total_expenses,
+            'savings_rate': round(savings_rate, 2),
+            'currency': 'NPR'
         })
 
-# --- Budget Categories Endpoint ---
 class BudgetCategoriesView(APIView):
     def get(self, request):
-        now = timezone.now()
         categories = Category.objects.all()
-        data = []
-        for cat in categories:
-            # Budget limit for this category
-            budget = Budget.objects.filter(category=cat).first()
-            budget_limit = budget.amount if budget else 0
-
-            # Amount spent in this category this month
+        category_data = []
+        now = timezone.now()
+        
+        for category in categories:
             amount_spent = Expense.objects.filter(
-                category=cat, date__year=now.year, date__month=now.month
+                user=request.user,
+                category=category, 
+                date__year=now.year, 
+                date__month=now.month
             ).aggregate(total=Sum('amount'))['total'] or 0
-
-            percent_spent = (amount_spent / budget_limit * 100) if budget_limit else 0
-            if percent_spent < 90:
-                status_str = "normal"
-            elif percent_spent <= 100:
-                status_str = "warning"
-            else:
-                status_str = "danger"
-
-            data.append({
-                "category_name": cat.name,
-                "budget_limit": budget_limit,
-                "amount_spent": amount_spent,
-                "percent_spent": round(percent_spent, 2),
-                "status": status_str,
-                "icon": getattr(cat, "icon", "🍽️"),  # Placeholder
-                "color": getattr(cat, "color", "#3b82f6"),  # Placeholder
+            
+            # Get budget limit from Budget model for the current user
+            budget_obj = Budget.objects.filter(
+                user=request.user,
+                category=category,
+                month=now.month,
+                year=now.year
+            ).first()
+            budget_limit = budget_obj.amount if budget_obj else 0
+            
+            percentage_used = (amount_spent / budget_limit * 100) if budget_limit > 0 else 0
+            
+            category_data.append({
+                'id': category.id,
+                'name': category.name,
+                'budget_limit': budget_limit,
+                'amount_spent': amount_spent,
+                'percentage_used': round(percentage_used, 2),
+                'color': getattr(category, 'color', '#3b82f6'),  # Default color if not set
+                'status': 'over' if amount_spent > budget_limit else 'under' if amount_spent < float(budget_limit) * 0.8 else 'normal'
             })
-        return Response(data)
+        
+        return Response(category_data)
 
 class DashboardSummaryView(APIView):
     def get(self, request):
         now = timezone.now()
         monthly_income = MonthlyIncome.objects.filter(
-            month=now.month, year=now.year
+            user=request.user,
+            month=now.month, 
+            year=now.year
         ).aggregate(total=Sum('amount'))['total'] or 0
-
         total_expenses = Expense.objects.filter(
-            date__year=now.year, date__month=now.month
+            user=request.user,
+            date__year=now.year, 
+            date__month=now.month
         ).aggregate(total=Sum('amount'))['total'] or 0
-
-        total_budgeted = Budget.objects.aggregate(total=Sum('amount'))['total'] or 0
-        total_savings = monthly_income - total_expenses
-        saving_rate = ((monthly_income - total_expenses) / monthly_income * 100) if monthly_income else 0
-        budget_score = 100
-        if total_budgeted:
-            percent_spent = (total_expenses / total_budgeted) * 100
-            budget_score = max(0, 100 - max(0, percent_spent - 100))
-
+        savings_rate = ((monthly_income - total_expenses) / monthly_income * 100) if monthly_income > 0 else 0
+        
+        # Get recent transactions
+        recent_transactions = Transaction.objects.all().order_by('-date')[:5]
+        transaction_data = []
+        for transaction in recent_transactions:
+            transaction_data.append({
+                'id': transaction.id,
+                'description': transaction.description[:50] + '...' if len(transaction.description) > 50 else transaction.description,
+                'amount': transaction.amount or 0,
+                'date': transaction.date.strftime('%Y-%m-%d') if transaction.date else None,
+                'category': transaction.category or 'Uncategorized'
+            })
+        
         return Response({
-            "monthly_income": monthly_income,
-            "total_expenses": total_expenses,
-            "total_budgeted": total_budgeted,
-            "total_savings": total_savings,
-            "saving_rate": round(saving_rate, 2),
-            "budget_score": round(budget_score, 2),
-            "currency": "NPR"
+            'monthly_income': monthly_income,
+            'total_expenses': total_expenses,
+            'savings_rate': round(savings_rate, 2),
+            'currency': 'NPR',
+            'recent_transactions': transaction_data
         })
 
-from django.db.models.functions import TruncMonth
 class DashboardTrendsView(APIView):
     def get(self, request):
         now = timezone.now()
-        expenses = (
-            Expense.objects
-            .filter(date__year=now.year)
-            .annotate(month=TruncMonth('date'))
-            .values('month')
-            .annotate(total=Sum('amount'))
-            .order_by('month')
-        )
-        return Response(list(expenses))
+        trends = []
+        
+        # Get last 6 months of data
+        for i in range(6):
+            month = now.month - i
+            year = now.year
+            if month <= 0:
+                month += 12
+                year -= 1
+            
+            monthly_income = MonthlyIncome.objects.filter(user=request.user, month=month, year=year).aggregate(total=Sum('amount'))['total'] or 0
+            total_expenses = Expense.objects.filter(user=request.user, date__year=year, date__month=month).aggregate(total=Sum('amount'))['total'] or 0
+            
+            trends.append({
+                'month': f"{year}-{month:02d}",
+                'income': monthly_income,
+                'expenses': total_expenses,
+                'savings': monthly_income - total_expenses
+            })
+        
+        return Response(trends[::-1])  # Reverse to show oldest first
 
 class ChatView(APIView):
     def post(self, request):
         user_message = request.data.get('message', '').lower()
-        
-        # Get user's financial data for context
         now = timezone.now()
-        monthly_income = MonthlyIncome.objects.filter(
-            month=now.month, year=now.year
-        ).aggregate(total=Sum('amount'))['total'] or 0
         
-        total_expenses = Expense.objects.filter(
-            date__year=now.year, date__month=now.month
-        ).aggregate(total=Sum('amount'))['total'] or 0
-        
+        # Get real financial data
+        monthly_income = MonthlyIncome.objects.filter(user=request.user, month=now.month, year=now.year).aggregate(total=Sum('amount'))['total'] or 0
+        total_expenses = Expense.objects.filter(user=request.user, date__year=now.year, date__month=now.month).aggregate(total=Sum('amount'))['total'] or 0
         categories = Category.objects.all()
         category_totals = []
-        for cat in categories:
-            amount_spent = Expense.objects.filter(
-                category=cat, date__year=now.year, date__month=now.month
-            ).aggregate(total=Sum('amount'))['total'] or 0
-            if amount_spent > 0:
-                category_totals.append({
-                    'category': cat.name,
-                    'amount': amount_spent
-                })
         
-        # Sort categories by amount spent
+        for cat in categories:
+            amount_spent = Expense.objects.filter(user=request.user, category=cat, date__year=now.year, date__month=now.month).aggregate(total=Sum('amount'))['total'] or 0
+            if amount_spent > 0:
+                category_totals.append({'category': cat.name, 'amount': amount_spent})
+        
         category_totals.sort(key=lambda x: x['amount'], reverse=True)
         
-        # Generate response based on user message
         response = self.generate_response(user_message, monthly_income, total_expenses, category_totals)
-        
-        return Response({
-            'message': response,
-            'timestamp': timezone.now()
-        })
-    
+        return Response({'message': response, 'timestamp': timezone.now()})
+
     def generate_response(self, user_message, monthly_income, total_expenses, category_totals):
-        savings = monthly_income - total_expenses
-        savings_rate = ((monthly_income - total_expenses) / monthly_income * 100) if monthly_income else 0
-        
-        if 'income' in user_message or 'salary' in user_message:
+        if 'income' in user_message or 'salary' in user_message or 'earn' in user_message:
             return f"Your monthly income is NPR {monthly_income:,.2f}. This is your total earnings for the current month."
         
-        elif 'expense' in user_message or 'spending' in user_message:
+        elif 'expense' in user_message or 'spend' in user_message or 'cost' in user_message:
             return f"Your total expenses this month are NPR {total_expenses:,.2f}. This includes all your spending across different categories."
         
         elif 'savings' in user_message or 'save' in user_message:
-            if savings > 0:
-                return f"Great! You've saved NPR {savings:,.2f} this month, which is {savings_rate:.1f}% of your income. Keep up the good work!"
-            else:
-                return f"Your expenses (NPR {total_expenses:,.2f}) exceed your income (NPR {monthly_income:,.2f}) by NPR {abs(savings):,.2f}. Consider reviewing your spending habits."
+            savings = monthly_income - total_expenses
+            savings_rate = (savings / monthly_income * 100) if monthly_income > 0 else 0
+            return f"Your savings this month are NPR {savings:,.2f} ({savings_rate:.1f}% of your income). Keep up the good work!"
         
         elif 'category' in user_message or 'categories' in user_message:
             if category_totals:
                 top_category = category_totals[0]
-                response = f"Your top spending categories this month:\n"
-                for i, cat in enumerate(category_totals[:3], 1):
-                    response += f"{i}. {cat['category']}: NPR {cat['amount']:,.2f}\n"
-                return response
+                return f"Your highest spending category is {top_category['category']} with NPR {top_category['amount']:,.2f} this month."
             else:
-                return "You haven't recorded any expenses this month yet."
+                return "You haven't recorded any expenses by category yet."
         
         elif 'budget' in user_message:
-            if savings_rate >= 20:
-                return f"Excellent! You're saving {savings_rate:.1f}% of your income, which is above the recommended 20% savings rate."
-            elif savings_rate >= 10:
-                return f"You're saving {savings_rate:.1f}% of your income. Consider increasing your savings to reach the recommended 20%."
-            else:
-                return f"Your savings rate is {savings_rate:.1f}%. Try to increase your savings to at least 20% of your income for better financial security."
+            return f"Your monthly budget overview: Income NPR {monthly_income:,.2f}, Expenses NPR {total_expenses:,.2f}. You have NPR {monthly_income - total_expenses:,.2f} remaining."
         
         elif 'help' in user_message or 'what' in user_message:
-            return """I can help you with:
-• Your income and expenses
-• Savings analysis
-• Category-wise spending
-• Budget recommendations
-• Financial tips
-
-Just ask me about any of these topics!"""
+            return "I can help you with: income, expenses, savings, categories, and budget information. Just ask me about any of these topics!"
         
         else:
-            return f"I can help you understand your finances. You have NPR {monthly_income:,.2f} income and NPR {total_expenses:,.2f} expenses this month. Ask me about your income, expenses, savings, or categories!"
+            return f"Hello! I can help you with your finances. Your current monthly income is NPR {monthly_income:,.2f} and expenses are NPR {total_expenses:,.2f}. What would you like to know more about?"
+
+# Authentication Views
+class LoginView(APIView):
+    permission_classes = []
+    
+    def post(self, request):
+        email = request.data.get('email')
+        password = request.data.get('password')
+        
+        if not email or not password:
+            return Response({'error': 'Email and password are required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Try to find user by email (since we're using email for login)
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({'error': 'Invalid email or password'}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        # Authenticate user
+        authenticated_user = authenticate(username=user.username, password=password)
+        if authenticated_user is None:
+            return Response({'error': 'Invalid email or password'}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        # Generate JWT tokens
+        refresh = RefreshToken.for_user(authenticated_user)
+        
+        return Response({
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'user': {
+                'id': authenticated_user.id,
+                'username': authenticated_user.username,
+                'email': authenticated_user.email,
+                'first_name': authenticated_user.first_name,
+                'last_name': authenticated_user.last_name
+            }
+        })
+
+class RegisterView(APIView):
+    permission_classes = []
+    
+    def post(self, request):
+        username = request.data.get('username')
+        email = request.data.get('email')
+        password = request.data.get('password')
+        
+        if not username or not email or not password:
+            return Response({'error': 'Username, email and password are required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if user already exists
+        if User.objects.filter(username=username).exists():
+            return Response({'error': 'Username already exists'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if User.objects.filter(email=email).exists():
+            return Response({'error': 'Email already exists'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Create user
+        try:
+            user = User.objects.create_user(
+                username=username,
+                email=email,
+                password=password
+            )
+            
+            # Generate JWT tokens for the new user
+            refresh = RefreshToken.for_user(user)
+            
+            return Response({
+                'message': 'User created successfully',
+                'access': str(refresh.access_token),
+                'refresh': str(refresh),
+                'user': {
+                    'id': user.id,
+                    'username': user.username,
+                    'email': user.email,
+                    'first_name': user.first_name,
+                    'last_name': user.last_name
+                }
+            }, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            return Response({'error': f'Error creating user: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# Custom JWT Login View that supports email login
+class CustomTokenObtainPairView(TokenObtainPairView):
+    def post(self, request, *args, **kwargs):
+        # Check if user is trying to login with email
+        email = request.data.get('email')
+        username = request.data.get('username')
+        password = request.data.get('password')
+        
+        if email and not username:
+            # Try to find user by email
+            try:
+                user = User.objects.get(email=email)
+                request.data['username'] = user.username
+            except User.DoesNotExist:
+                return Response({'error': 'Invalid email or password'}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        return super().post(request, *args, **kwargs)

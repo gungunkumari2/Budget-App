@@ -1,6 +1,8 @@
-fastapi
-uvicorn
-python-multipart
+Django==5.2.3
+djangorestframework==3.15.0
+djangorestframework-simplejwt==5.3.0
+django-cors-headers==4.3.1
+setuptools<81
 pytesseract
 easyocr
 Pillow

@@ -61,9 +61,21 @@ export default function AIChatWidget() {
     setError(null);
 
     try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const config = {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      };
+
       const response = await axios.post('http://localhost:8000/api/upload-receipt/chat/', {
         message: userMsg.content
-      });
+      }, config);
       
       const aiMsg: ChatMessage = {
         role: 'assistant',
@@ -74,7 +86,16 @@ export default function AIChatWidget() {
       setMessages(msgs => [...msgs, aiMsg]);
     } catch (err: any) {
       console.error('Chat error:', err);
-      setError('Failed to get response. Please try again.');
+      if (err.message === 'Authentication required') {
+        setError('Please log in to use the chat feature.');
+      } else if (err.response?.status === 401) {
+        setError('Authentication expired. Please log in again.');
+        // Clear invalid token
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      } else {
+        setError('Failed to get response. Please try again.');
+      }
       
       const errorMsg: ChatMessage = {
         role: 'assistant',

@@ -116,9 +116,14 @@ export const ReceiptUpload = () => {
           const formData = new FormData();
           formData.append('file', file.file);
           const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-          const response = await axios.post(`${BACKEND_URL}/api/upload-receipt/`, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-          });
+          const token = localStorage.getItem('token');
+          const config = {
+            headers: { 
+              'Content-Type': 'multipart/form-data',
+              ...(token && { 'Authorization': `Bearer ${token}` })
+            },
+          };
+          const response = await axios.post(`${BACKEND_URL}/api/upload-receipt/`, formData, config);
           const data = response.data;
           let extractedData = undefined;
           if (data.type === 'csv') {
@@ -132,7 +137,13 @@ export const ReceiptUpload = () => {
             progress: 100,
             extractedData,
           };
-        } catch (err) {
+        } catch (err: any) {
+          console.error('Upload error:', err);
+          if (err.response?.status === 401) {
+            // Clear invalid token
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+          }
           return {
             ...file,
             status: 'error' as UploadedFile['status'],

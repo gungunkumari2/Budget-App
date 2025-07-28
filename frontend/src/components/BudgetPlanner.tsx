@@ -18,12 +18,12 @@ import {
 } from 'lucide-react';
 
 interface BudgetCategory {
-  category_name: string;
+  id: number;
+  name: string;
   budget_limit: number;
   amount_spent: number;
-  percent_spent: number;
+  percentage_used: number;
   status: string;
-  icon: string;
   color: string;
 }
 
@@ -43,20 +43,57 @@ export const BudgetPlanner = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setLoading(true);
-    Promise.all([
-      axios.get('http://localhost:8000/api/upload-receipt/dashboard-summary/'),
-      axios.get('http://localhost:8000/api/upload-receipt/budget-categories/')
-    ])
-      .then(([summaryRes, catRes]) => {
+    const fetchBudgetData = async () => {
+      setLoading(true);
+      setError(null);
+      
+      try {
+        const token = localStorage.getItem('token');
+        console.log('Token found:', !!token); // Debug log
+        
+        if (!token) {
+          setError('Authentication required. Please log in again.');
+          setLoading(false);
+          return;
+        }
+
+        const config = {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        };
+
+        console.log('Making API requests...'); // Debug log
+
+        const [summaryRes, catRes] = await Promise.all([
+          axios.get('http://localhost:8000/api/upload-receipt/dashboard-summary/', config),
+          axios.get('http://localhost:8000/api/upload-receipt/budget-categories/', config)
+        ]);
+
+        console.log('API responses received:', { summary: summaryRes.data, categories: catRes.data }); // Debug log
+
         setSummary(summaryRes.data);
         setCategories(catRes.data);
         setLoading(false);
-      })
-      .catch(() => {
-        setError('Failed to load budget data');
+      } catch (err: any) {
+        console.error('Budget data fetch error:', err);
+        console.error('Error response:', err.response?.data);
+        console.error('Error status:', err.response?.status);
+        
+        if (err.response?.status === 401) {
+          setError('Authentication expired. Please log in again.');
+          // Clear invalid token
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          console.log('Cleared invalid token from localStorage');
+        } else {
+          setError(`Failed to load budget data: ${err.message}`);
+        }
         setLoading(false);
-      });
+      }
+    };
+
+    fetchBudgetData();
   }, []);
 
   const updateCategoryBudget = (index: number, newAmount: number) => {
@@ -154,8 +191,8 @@ export const BudgetPlanner = () => {
       const topOverBudget = overBudgetCategories[0];
       insights.push({
         type: 'warning',
-        title: `${topOverBudget.category_name} Over Budget`,
-        description: `You've exceeded your ${topOverBudget.category_name} budget by ${currency} ${(topOverBudget.amount_spent - topOverBudget.budget_limit).toLocaleString()}. Consider reviewing your spending in this category.`,
+        title: `${topOverBudget.name} Over Budget`,
+        description: `You've exceeded your ${topOverBudget.name} budget by ${currency} ${(topOverBudget.amount_spent - topOverBudget.budget_limit).toLocaleString()}. Consider reviewing your spending in this category.`,
         action: 'View Tips'
       });
     }
@@ -169,8 +206,8 @@ export const BudgetPlanner = () => {
       const topUnderBudget = underBudgetCategories[0];
       insights.push({
         type: 'success',
-        title: `Great ${topUnderBudget.category_name} Savings!`,
-        description: `You're ${((topUnderBudget.budget_limit - topUnderBudget.amount_spent) / topUnderBudget.budget_limit * 100).toFixed(0)}% under budget for ${topUnderBudget.category_name}. Keep up the good work!`,
+        title: `Great ${topUnderBudget.name} Savings!`,
+        description: `You're ${((topUnderBudget.budget_limit - topUnderBudget.amount_spent) / topUnderBudget.budget_limit * 100).toFixed(0)}% under budget for ${topUnderBudget.name}. Keep up the good work!`,
         action: 'See Details'
       });
     }
@@ -314,12 +351,12 @@ export const BudgetPlanner = () => {
               const StatusIcon = statusInfo.icon;
 
               return (
-                <div key={category.category_name} className="space-y-3">
+                <div key={`category-${index}-${category.name}`} className="space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <span className="text-2xl">{category.icon}</span>
+                      <span className="text-2xl">💰</span>
                       <div>
-                        <h4 className="font-medium">{category.category_name}</h4>
+                        <h4 className="font-medium">{category.name}</h4>
                         <p className="text-sm text-muted-foreground">
                           {currency} {category.amount_spent} of {currency} {category.budget_limit} spent
                         </p>
@@ -376,7 +413,7 @@ export const BudgetPlanner = () => {
         <CardContent>
           <div className="space-y-4">
             {aiInsights.map((insight, index) => (
-              <div key={index} className="flex items-start gap-4 p-4 border rounded-lg">
+              <div key={`insight-${index}-${insight.title}`} className="flex items-start gap-4 p-4 border rounded-lg">
                 <div className={`p-2 rounded-full ${
                   insight.type === 'warning' ? 'bg-warning/10' :
                   insight.type === 'success' ? 'bg-success/10' :

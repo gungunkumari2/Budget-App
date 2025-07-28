@@ -31,25 +31,53 @@ export default function FinancialAnalytics() {
   const [currency, setCurrency] = useState('NPR');
 
   useEffect(() => {
-    setLoading(true);
-    axios.get('http://localhost:8000/api/upload-receipt/budget-categories/')
-      .then(res => {
+    const fetchAnalyticsData = async () => {
+      setLoading(true);
+      setError(null);
+      
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          setError('Authentication required. Please log in again.');
+          setLoading(false);
+          return;
+        }
+
+        const config = {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        };
+
+        const res = await axios.get('http://localhost:8000/api/upload-receipt/budget-categories/', config);
+        
         const data = res.data.map((cat: any) => ({
-          category: cat.category_name,
+          category: cat.name,
           total: cat.amount_spent,
-          percentage: cat.percent_spent,
-          trend: cat.status === 'danger' ? 'up' : cat.status === 'warning' ? 'stable' : 'down',
+          percentage: cat.percentage_used,
+          trend: cat.status === 'over' ? 'up' : cat.status === 'normal' ? 'stable' : 'down',
           color: cat.color,
           icon: cat.icon
         }));
+        
         setCategoryTotals(data);
         setCurrency('NPR');
         setLoading(false);
-      })
-      .catch(() => {
-        setError('Failed to load analytics data');
+      } catch (err: any) {
+        console.error('Analytics data fetch error:', err);
+        if (err.response?.status === 401) {
+          setError('Authentication expired. Please log in again.');
+          // Clear invalid token
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+        } else {
+          setError('Failed to load analytics data. Please try again.');
+        }
         setLoading(false);
-      });
+      }
+    };
+
+    fetchAnalyticsData();
   }, []);
 
   const totalSpent = categoryTotals.reduce((sum, cat) => sum + cat.total, 0);

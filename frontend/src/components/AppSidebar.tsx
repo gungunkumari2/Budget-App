@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   BarChart3,
   Brain,
@@ -11,6 +11,20 @@ import {
   User,
   LogOut
 } from "lucide-react";
+import { useAuth } from "../App";
+import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+
 
 import {
   Sidebar,
@@ -42,6 +56,9 @@ const secondaryItems = [
 export function AppSidebar() {
   const { state } = useSidebar();
   const location = useLocation();
+  const navigate = useNavigate();
+  const { logout, user } = useAuth();
+  const { toast } = useToast();
   const currentPath = location.pathname;
   const collapsed = state === "collapsed";
 
@@ -52,6 +69,28 @@ export function AppSidebar() {
     isActive 
       ? "bg-primary/10 text-primary border-r-2 border-primary font-medium" 
       : "text-muted-foreground hover:text-foreground hover:bg-muted/50";
+
+  const handleLogout = () => {
+    logout();
+    toast({
+      title: "Logged out successfully",
+      description: "You have been logged out of your account.",
+    });
+    navigate('/signin');
+  };
+
+  // Keyboard shortcut for logout (Ctrl+L or Cmd+L)
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'l') {
+        event.preventDefault();
+        handleLogout();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   return (
     <Sidebar
@@ -121,16 +160,62 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
+        {/* User Profile Section */}
+        {user && (
+          <div className="mt-6 pt-4 border-t">
+            {!collapsed ? (
+              <div className="flex items-center space-x-3 p-3 rounded-lg bg-muted/50">
+                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                  <User className="h-4 w-4 text-primary" />
+                </div>
+                              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{user.username}</p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {user.email ? user.email : 'Signed in'}
+                </p>
+              </div>
+              </div>
+            ) : (
+              <div className="flex justify-center">
+                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                  <User className="h-4 w-4 text-primary" />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Logout Button */}
         <div className="mt-auto pt-4">
-          <Button 
-            variant="ghost" 
-            className={`w-full ${collapsed ? "px-2" : "justify-start"} text-muted-foreground hover:text-foreground hover:bg-destructive/10 hover:text-destructive`}
-            title={collapsed ? "Logout" : undefined}
-          >
-            <LogOut className="h-4 w-4 flex-shrink-0" />
-            {!collapsed && <span className="ml-3">Logout</span>}
-          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button 
+                variant="ghost" 
+                className={`w-full ${collapsed ? "px-2" : "justify-start"} text-muted-foreground hover:text-foreground hover:bg-destructive/10 hover:text-destructive`}
+                title={collapsed ? "Logout (⌘+L)" : undefined}
+              >
+                <LogOut className="h-4 w-4 flex-shrink-0" />
+                {!collapsed && <span className="ml-3">Logout</span>}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Confirm Logout</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to logout? You will need to sign in again to access your account.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction 
+                  onClick={handleLogout}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Logout
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
 
         {/* Collapse Toggle */}

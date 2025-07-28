@@ -3,11 +3,50 @@ import axios from 'axios';
 
 export default function TransactionList() {
   const [transactions, setTransactions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    axios.get('http://localhost:8000/api/upload-receipt/transactions/')
-      .then(res => setTransactions(res.data));
+    const fetchTransactions = async () => {
+      setLoading(true);
+      setError(null);
+      
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          setError('Authentication required. Please log in again.');
+          setLoading(false);
+          return;
+        }
+
+        const config = {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        };
+
+        const res = await axios.get('http://localhost:8000/api/upload-receipt/transactions/', config);
+        setTransactions(res.data);
+        setLoading(false);
+      } catch (err: any) {
+        console.error('Transactions fetch error:', err);
+        if (err.response?.status === 401) {
+          setError('Authentication expired. Please log in again.');
+          // Clear invalid token
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+        } else {
+          setError('Failed to load transactions. Please try again.');
+        }
+        setLoading(false);
+      }
+    };
+
+    fetchTransactions();
   }, []);
+
+  if (loading) return <div className="text-center py-4">Loading transactions...</div>;
+  if (error) return <div className="text-red-500 text-center py-4">{error}</div>;
 
   return (
     <div>

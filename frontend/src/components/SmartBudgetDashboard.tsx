@@ -33,22 +33,49 @@ export const SmartBudgetDashboard = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setLoading(true);
-    Promise.all([
-      axios.get('http://localhost:8000/api/upload-receipt/dashboard-summary/'),
-      axios.get('http://localhost:8000/api/upload-receipt/transactions/?limit=6'),
-      axios.get('http://localhost:8000/api/upload-receipt/dashboard-trends/')
-    ])
-      .then(([summaryRes, txRes, trendsRes]) => {
+    const fetchDashboardData = async () => {
+      setLoading(true);
+      setError(null);
+      
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          setError('Authentication required. Please log in again.');
+          setLoading(false);
+          return;
+        }
+
+        const config = {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        };
+
+        const [summaryRes, txRes, trendsRes] = await Promise.all([
+          axios.get('http://localhost:8000/api/upload-receipt/dashboard-summary/', config),
+          axios.get('http://localhost:8000/api/upload-receipt/transactions/', config),
+          axios.get('http://localhost:8000/api/upload-receipt/dashboard-trends/', config)
+        ]);
+
         setDashboardData(summaryRes.data);
         setTransactions(txRes.data);
         setTrends(trendsRes.data);
         setLoading(false);
-      })
-      .catch(() => {
-        setError('Failed to load dashboard data');
+      } catch (err: any) {
+        console.error('Dashboard data fetch error:', err);
+        if (err.response?.status === 401) {
+          setError('Authentication expired. Please log in again.');
+          // Clear invalid token
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+        } else {
+          setError('Failed to load dashboard data. Please try again.');
+        }
         setLoading(false);
-      });
+      }
+    };
+
+    fetchDashboardData();
   }, []);
 
   const metrics = dashboardData ? [
@@ -64,12 +91,12 @@ export const SmartBudgetDashboard = () => {
     },
     {
       label: 'Savings Rate',
-      value: `${dashboardData.saving_rate}%`,
+      value: `${dashboardData.savings_rate}%`,
       icon: <Target className="h-5 w-5" />, color: 'text-primary'
     },
     {
       label: 'Budget Score',
-      value: `${dashboardData.budget_score}/100`,
+      value: `${Math.round((dashboardData.savings_rate / 100) * 100)}/100`,
       icon: <Star className="h-5 w-5" />, color: 'text-warning'
     }
   ] : [];
