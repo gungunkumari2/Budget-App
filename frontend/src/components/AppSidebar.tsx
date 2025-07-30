@@ -9,9 +9,10 @@ import {
   Settings,
   Upload,
   User,
-  LogOut
+  LogOut,
+  Receipt
 } from "lucide-react";
-import { useAuth } from "../App";
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import {
   AlertDialog,
@@ -24,7 +25,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-
 
 import {
   Sidebar,
@@ -45,6 +45,7 @@ const mainItems = [
   { title: "Dashboard", url: "/dashboard", icon: Home },
   { title: "Analytics", url: "/analytics", icon: BarChart3 },
   { title: "Budget Planning", url: "/budget", icon: Calculator },
+  { title: "Expenses", url: "/expenses", icon: Receipt },
   { title: "Upload Documents", url: "/upload", icon: Upload },
 ];
 
@@ -57,7 +58,7 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const location = useLocation();
   const navigate = useNavigate();
-  const { logout, user } = useAuth();
+  const { logout, user, isAuthenticated } = useAuth();
   const { toast } = useToast();
   const currentPath = location.pathname;
   const collapsed = state === "collapsed";
@@ -70,13 +71,18 @@ export function AppSidebar() {
       ? "bg-primary/10 text-primary border-r-2 border-primary font-medium" 
       : "text-muted-foreground hover:text-foreground hover:bg-muted/50";
 
-  const handleLogout = () => {
-    logout();
-    toast({
-      title: "Logged out successfully",
-      description: "You have been logged out of your account.",
-    });
-    navigate('/signin');
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/signin');
+    } catch (error) {
+      console.error('Logout error:', error);
+      toast({
+        title: "Logout failed",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   // Keyboard shortcut for logout (Ctrl+L or Cmd+L)
@@ -91,6 +97,11 @@ export function AppSidebar() {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  // Don't render sidebar if not authenticated
+  if (!isAuthenticated) {
+    return null;
+  }
 
   return (
     <Sidebar
@@ -168,12 +179,12 @@ export function AppSidebar() {
                 <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
                   <User className="h-4 w-4 text-primary" />
                 </div>
-                              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{user.username}</p>
-                <p className="text-xs text-muted-foreground truncate">
-                  {user.email ? user.email : 'Signed in'}
-                </p>
-              </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{user.username}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {user.email ? user.email : 'Signed in'}
+                  </p>
+                </div>
               </div>
             ) : (
               <div className="flex justify-center">

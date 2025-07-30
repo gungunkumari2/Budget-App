@@ -1,131 +1,112 @@
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { useNavigate, useLocation } from "react-router-dom";
-import { useState } from "react";
-import { Brain } from "lucide-react";
-import axios from "axios";
-import { useAuth } from "../App";
+import { useState } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
 
-const Signin = () => {
+export default function Signin() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  
+  const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const { login } = useAuth();
-  const [form, setForm] = useState({ email: '', password: '' });
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-    setError(null); // Clear error when user types
-  };
+  // Get the intended destination from location state
+  const from = location.state?.from?.pathname || '/dashboard';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setLoading(true);
+    setIsLoading(true);
 
     try {
-      const response = await axios.post("http://localhost:8000/api/upload-receipt/login/", {
-        email: form.email,
-        password: form.password
-      });
-
-      if (response.data.access) {
-        login(response.data.access, { 
-          username: response.data.user.username,
-          email: response.data.user.email 
-        }); // Store access token
-        // Redirect to the page they were trying to access, or dashboard
-        const from = location.state?.from?.pathname || "/dashboard";
+      const success = await login(email, password);
+      if (success) {
+        // Redirect to the intended page or dashboard
         navigate(from, { replace: true });
-      } else {
-        setError("Invalid response from server");
       }
-    } catch (err: any) {
-      console.error("Login error:", err);
-      if (err.response?.status === 401) {
-        setError("Invalid email or password");
-      } else if (err.response?.data?.error) {
-        setError(err.response.data.error);
-      } else if (err.code === "ERR_NETWORK") {
-        setError("Cannot connect to server. Please check your connection.");
-      } else {
-        setError("Login failed. Please try again.");
-      }
+    } catch (error) {
+      console.error('Login error:', error);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-primary/10 to-secondary/20">
-      <Card className="w-full max-w-md p-8 shadow-xl rounded-2xl border-0 bg-white/90 backdrop-blur-md">
-        <div className="flex flex-col items-center mb-6">
-          <span className="flex items-center gap-2 mb-2">
-            <Brain className="h-8 w-8 text-primary drop-shadow" />
-            <span className="text-2xl font-bold bg-gradient-to-r from-primary to-primary-glow bg-clip-text text-transparent">SmartBudget</span>
-          </span>
-          <CardTitle className="text-2xl font-semibold text-center w-full">Sign In</CardTitle>
-          <CardDescription className="text-center w-full mt-1">Welcome back! Please sign in to your account</CardDescription>
-        </div>
-        <CardContent className="p-0">
-          <form className="space-y-5" onSubmit={handleSubmit}>
-            <Input 
-              name="email"
-              type="email" 
-              placeholder="Email address" 
-              required 
-              className="h-12 text-base" 
-              value={form.email}
-              onChange={handleChange}
-            />
-            <Input 
-              name="password"
-              type="password" 
-              placeholder="Password" 
-              required 
-              className="h-12 text-base" 
-              value={form.password}
-              onChange={handleChange}
-            />
-            {error && (
-              <div className="text-red-500 text-sm bg-red-50 p-3 rounded-md border border-red-200">
-                {error}
-              </div>
-            )}
-            <div className="flex justify-end">
-              <button type="button" className="text-sm text-primary hover:underline focus:outline-none">Forgot password?</button>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader className="space-y-1">
+          <CardTitle className="text-2xl font-bold text-center">Welcome back</CardTitle>
+          <CardDescription className="text-center">
+            Enter your credentials to access your account
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="Enter your email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                disabled={isLoading}
+              />
             </div>
-            <Button 
-              type="submit" 
-              className="w-full h-12 text-base font-semibold shadow-md" 
-              size="lg"
-              disabled={loading}
-            >
-              {loading ? 'Signing In...' : 'Sign In'}
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  disabled={isLoading}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                  onClick={() => setShowPassword(!showPassword)}
+                  disabled={isLoading}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+            </div>
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Signing in...
+                </>
+              ) : (
+                'Sign in'
+              )}
             </Button>
           </form>
-          <div className="flex items-center my-6">
-            <div className="flex-grow border-t border-muted" />
-            <span className="mx-4 text-muted-foreground text-xs">or</span>
-            <div className="flex-grow border-t border-muted" />
-          </div>
-          <div className="text-center">
-            <p className="text-sm text-muted-foreground">
-              Don't have an account?{" "}
-              <button 
-                onClick={() => navigate('/register')}
-                className="text-primary hover:underline focus:outline-none"
-              >
-                Sign up
-              </button>
-            </p>
+          <div className="mt-6 text-center text-sm">
+            <span className="text-muted-foreground">Don't have an account? </span>
+            <Link to="/register" className="text-primary hover:underline">
+              Sign up
+            </Link>
           </div>
         </CardContent>
       </Card>
     </div>
   );
-};
-
-export default Signin; 
+} 

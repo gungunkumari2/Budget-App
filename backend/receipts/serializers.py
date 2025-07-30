@@ -1,32 +1,40 @@
 from rest_framework import serializers
 from .models import Budget, Category, Expense, PaymentMethod, Transaction, MonthlyIncome
 
-class BudgetSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Budget
-        fields = '__all__'
-
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
-        fields = '__all__'
-
-class ExpenseSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Expense
-        fields = '__all__'
+        fields = ['id', 'name']
 
 class PaymentMethodSerializer(serializers.ModelSerializer):
     class Meta:
         model = PaymentMethod
-        fields = '__all__'
+        fields = ['id', 'name']
+
+class ExpenseSerializer(serializers.ModelSerializer):
+    category = CategorySerializer(read_only=True)
+    payment_method = PaymentMethodSerializer(read_only=True)
+    
+    class Meta:
+        model = Expense
+        fields = [
+            'id', 'user', 'date', 'merchant', 'amount', 'currency', 
+            'category', 'payment_method', 'description', 'created_at'
+        ]
+
+class BudgetSerializer(serializers.ModelSerializer):
+    category = CategorySerializer(read_only=True)
+    
+    class Meta:
+        model = Budget
+        fields = ['id', 'user', 'category', 'amount', 'currency', 'month', 'year']
 
 class TransactionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Transaction
-        fields = '__all__'
+        fields = ['id', 'user', 'description', 'amount', 'category', 'date', 'created_at']
 
 class MonthlyIncomeSerializer(serializers.ModelSerializer):
     class Meta:
         model = MonthlyIncome
-        fields = '__all__' 
+        fields = ['id', 'user', 'amount', 'currency', 'month', 'year', 'created_at'] 

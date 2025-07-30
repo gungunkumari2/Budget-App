@@ -24,6 +24,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth.hashers import make_password
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import RefreshToken
+from django_filters import rest_framework as filters
 
 try:
     import easyocr
@@ -316,24 +317,32 @@ class LoginView(APIView):
         email = request.data.get('email')
         password = request.data.get('password')
         
+        print(f"Login attempt - Email: {email}")  # Debug log
+        
         if not email or not password:
+            print("Missing email or password")  # Debug log
             return Response({'error': 'Email and password are required'}, status=status.HTTP_400_BAD_REQUEST)
         
         try:
             # Try to find user by email (since we're using email for login)
             user = User.objects.get(email=email)
+            print(f"User found: {user.username}")  # Debug log
         except User.DoesNotExist:
+            print(f"User not found for email: {email}")  # Debug log
             return Response({'error': 'Invalid email or password'}, status=status.HTTP_401_UNAUTHORIZED)
         
         # Authenticate user
         authenticated_user = authenticate(username=user.username, password=password)
         if authenticated_user is None:
+            print(f"Authentication failed for user: {user.username}")  # Debug log
             return Response({'error': 'Invalid email or password'}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        print(f"Authentication successful for user: {authenticated_user.username}")  # Debug log
         
         # Generate JWT tokens
         refresh = RefreshToken.for_user(authenticated_user)
         
-        return Response({
+        response_data = {
             'access': str(refresh.access_token),
             'refresh': str(refresh),
             'user': {
@@ -342,8 +351,12 @@ class LoginView(APIView):
                 'email': authenticated_user.email,
                 'first_name': authenticated_user.first_name,
                 'last_name': authenticated_user.last_name
-            }
-        })
+            },
+            'message': 'Login successful'
+        }
+        
+        print(f"Login successful, returning response")  # Debug log
+        return Response(response_data)
 
 class RegisterView(APIView):
     permission_classes = []
@@ -390,6 +403,48 @@ class RegisterView(APIView):
         except Exception as e:
             return Response({'error': f'Error creating user: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+class LogoutView(APIView):
+    def post(self, request):
+        try:
+            # Blacklist the refresh token
+            refresh_token = request.data.get('refresh')
+            if refresh_token:
+                token = RefreshToken(refresh_token)
+                token.blacklist()
+            
+            return Response({'message': 'Logout successful'}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': f'Error during logout: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+
+class UserProfileView(APIView):
+    def get(self, request):
+        return Response({
+            'user': {
+                'id': request.user.id,
+                'username': request.user.username,
+                'email': request.user.email,
+                'first_name': request.user.first_name,
+                'last_name': request.user.last_name
+            }
+        })
+
+class TokenRefreshView(APIView):
+    permission_classes = []
+    
+    def post(self, request):
+        refresh_token = request.data.get('refresh')
+        if not refresh_token:
+            return Response({'error': 'Refresh token is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            refresh = RefreshToken(refresh_token)
+            return Response({
+                'access': str(refresh.access_token),
+                'refresh': str(refresh)
+            })
+        except Exception as e:
+            return Response({'error': 'Invalid refresh token'}, status=status.HTTP_401_UNAUTHORIZED)
+
 # Custom JWT Login View that supports email login
 class CustomTokenObtainPairView(TokenObtainPairView):
     def post(self, request, *args, **kwargs):
@@ -407,3 +462,92 @@ class CustomTokenObtainPairView(TokenObtainPairView):
                 return Response({'error': 'Invalid email or password'}, status=status.HTTP_401_UNAUTHORIZED)
         
         return super().post(request, *args, **kwargs)
+
+class CategoryListView(generics.ListAPIView):
+    serializer_class = CategorySerializer
+    
+    def get_queryset(self):
+        return Category.objects.all().order_by('name')
+
+class PaymentMethodListView(generics.ListAPIView):
+    serializer_class = PaymentMethodSerializer
+    
+    def get_queryset(self):
+        return PaymentMethod.objects.all().order_by('name')
+
+class ExpenseListView(generics.ListAPIView):
+    serializer_class = ExpenseSerializer
+    
+    def get_queryset(self):
+        queryset = Expense.objects.filter(user=self.request.user).select_related('category', 'payment_method')
+        
+        # Filter by category
+        category_id = self.request.query_params.get('category')
+        if category_id:
+            queryset = queryset.filter(category_id=category_id)
+        
+        # Filter by date range
+        start_date = self.request.query_params.get('start_date')
+        end_date = self.request.query_params.get('end_date')
+        if start_date:
+            queryset = queryset.filter(date__gte=start_date)
+        if end_date:
+            queryset = queryset.filter(date__lte=end_date)
+        
+        # Filter by amount range
+        min_amount = self.request.query_params.get('min_amount')
+        max_amount = self.request.query_params.get('max_amount')
+        if min_amount:
+            queryset = queryset.filter(amount__gte=min_amount)
+        if max_amount:
+            queryset = queryset.filter(amount__lte=max_amount)
+        
+        # Filter by merchant
+        merchant = self.request.query_params.get('merchant')
+        if merchant:
+            queryset = queryset.filter(merchant__icontains=merchant)
+        
+        # Order by date (newest first)
+        return queryset.order_by('-date')
+
+class ExpenseStatsView(APIView):
+    def get(self, request):
+        user = request.user
+        now = timezone.now()
+        
+        # Get total expenses for current month
+        current_month_expenses = Expense.objects.filter(
+            user=user,
+            date__year=now.year,
+            date__month=now.month
+        ).aggregate(total=Sum('amount'))['total'] or 0
+        
+        # Get expenses by category for current month
+        category_expenses = Expense.objects.filter(
+            user=user,
+            date__year=now.year,
+            date__month=now.month
+        ).values('category__name').annotate(
+            total=Sum('amount'),
+            count=models.Count('id')
+        ).order_by('-total')
+        
+        # Get top merchants
+        top_merchants = Expense.objects.filter(
+            user=user,
+            date__year=now.year,
+            date__month=now.month
+        ).values('merchant').annotate(
+            total=Sum('amount'),
+            count=models.Count('id')
+        ).order_by('-total')[:5]
+        
+        # Get recent expenses
+        recent_expenses = Expense.objects.filter(user=user).select_related('category', 'payment_method').order_by('-date')[:10]
+        
+        return Response({
+            'current_month_total': current_month_expenses,
+            'category_breakdown': list(category_expenses),
+            'top_merchants': list(top_merchants),
+            'recent_expenses': ExpenseSerializer(recent_expenses, many=True).data
+        })

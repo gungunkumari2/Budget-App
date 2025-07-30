@@ -1,96 +1,221 @@
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { useNavigate } from "react-router-dom";
-import { useState } from "react";
-import { Brain } from "lucide-react";
-import axios from "axios";
-import { useAuth } from "../App"; // Import useAuth context
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
 
-const Register = () => {
+export default function Register() {
+  const [formData, setFormData] = useState({
+    username: '',
+    email: '',
+    password: '',
+    confirmPassword: ''
+  });
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errors, setErrors] = useState<{[key: string]: string}>({});
+  
+  const { register } = useAuth();
   const navigate = useNavigate();
-  const { login } = useAuth(); // Get login function from AuthContext
-  const [form, setForm] = useState({ username: '', email: '', password: '', confirm: '' });
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+    // Clear error when user starts typing
+    if (errors[name]) {
+      setErrors(prev => ({ ...prev, [name]: '' }));
+    }
+  };
+
+  const validateForm = () => {
+    const newErrors: {[key: string]: string} = {};
+
+    if (!formData.username.trim()) {
+      newErrors.username = 'Username is required';
+    } else if (formData.username.length < 3) {
+      newErrors.username = 'Username must be at least 3 characters';
+    }
+
+    if (!formData.email.trim()) {
+      newErrors.email = 'Email is required';
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      newErrors.email = 'Please enter a valid email';
+    }
+
+    if (!formData.password) {
+      newErrors.password = 'Password is required';
+    } else if (formData.password.length < 6) {
+      newErrors.password = 'Password must be at least 6 characters';
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      newErrors.confirmPassword = 'Passwords do not match';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    if (form.password !== form.confirm) {
-      setError("Passwords do not match");
+    
+    if (!validateForm()) {
       return;
     }
-    setLoading(true);
+
+    setIsLoading(true);
+
     try {
-      // Register user and get JWT token in one request
-      const response = await axios.post("http://localhost:8000/api/upload-receipt/register/", {
-        username: form.username,
-        email: form.email,
-        password: form.password
-      });
-      
-      if (response.data.access) {
-        login(response.data.access, { 
-          username: form.username,
-          email: form.email 
-        });
-        navigate("/dashboard");
-      } else {
-        setError("Registration successful but no token received");
+      const success = await register(formData.username, formData.email, formData.password);
+      if (success) {
+        // Redirect to dashboard after successful registration
+        navigate('/dashboard', { replace: true });
       }
-    } catch (err: any) {
-      console.error("Registration error:", err);
-      setError(err.response?.data?.error || "Registration failed");
+    } catch (error) {
+      console.error('Registration error:', error);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-primary/10 to-secondary/20">
-      <Card className="w-full max-w-md p-8 shadow-xl rounded-2xl border-0 bg-white/90 backdrop-blur-md">
-        <div className="flex flex-col items-center mb-6">
-          <span className="flex items-center gap-2 mb-2">
-            <Brain className="h-8 w-8 text-primary drop-shadow" />
-            <span className="text-2xl font-bold bg-gradient-to-r from-primary to-primary-glow bg-clip-text text-transparent">SmartBudget</span>
-          </span>
-          <CardTitle className="text-2xl font-semibold text-center w-full">Create Account</CardTitle>
-          <CardDescription className="text-center w-full mt-1">Sign up to start managing your budget</CardDescription>
-        </div>
-        <CardContent className="p-0">
-          <form className="space-y-5" onSubmit={handleSubmit}>
-            <Input name="username" type="text" placeholder="Username" required className="h-12 text-base" value={form.username} onChange={handleChange} />
-            <Input name="email" type="email" placeholder="Email address" required className="h-12 text-base" value={form.email} onChange={handleChange} />
-            <Input name="password" type="password" placeholder="Password" required className="h-12 text-base" value={form.password} onChange={handleChange} />
-            <Input name="confirm" type="password" placeholder="Confirm Password" required className="h-12 text-base" value={form.confirm} onChange={handleChange} />
-            {error && <div className="text-red-500 text-sm">{error}</div>}
-            <Button type="submit" className="w-full h-12 text-base font-semibold shadow-md" size="lg" disabled={loading}>{loading ? 'Registering...' : 'Create Account'}</Button>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader className="space-y-1">
+          <CardTitle className="text-2xl font-bold text-center">Create an account</CardTitle>
+          <CardDescription className="text-center">
+            Enter your details to create your account
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="username">Username</Label>
+              <Input
+                id="username"
+                name="username"
+                type="text"
+                placeholder="Enter your username"
+                value={formData.username}
+                onChange={handleChange}
+                required
+                disabled={isLoading}
+                className={errors.username ? 'border-red-500' : ''}
+              />
+              {errors.username && (
+                <p className="text-sm text-red-500">{errors.username}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                placeholder="Enter your email"
+                value={formData.email}
+                onChange={handleChange}
+                required
+                disabled={isLoading}
+                className={errors.email ? 'border-red-500' : ''}
+              />
+              {errors.email && (
+                <p className="text-sm text-red-500">{errors.email}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <div className="relative">
+                <Input
+                  id="password"
+                  name="password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Enter your password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  required
+                  disabled={isLoading}
+                  className={errors.password ? 'border-red-500' : ''}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                  onClick={() => setShowPassword(!showPassword)}
+                  disabled={isLoading}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+              {errors.password && (
+                <p className="text-sm text-red-500">{errors.password}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <div className="relative">
+                <Input
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  placeholder="Confirm your password"
+                  value={formData.confirmPassword}
+                  onChange={handleChange}
+                  required
+                  disabled={isLoading}
+                  className={errors.confirmPassword ? 'border-red-500' : ''}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  disabled={isLoading}
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+              {errors.confirmPassword && (
+                <p className="text-sm text-red-500">{errors.confirmPassword}</p>
+              )}
+            </div>
+
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating account...
+                </>
+              ) : (
+                'Create account'
+              )}
+            </Button>
           </form>
-          <div className="flex items-center my-6">
-            <div className="flex-grow border-t border-muted" />
-            <span className="mx-4 text-muted-foreground text-xs">or</span>
-            <div className="flex-grow border-t border-muted" />
-          </div>
-          <div className="text-center">
-            <p className="text-sm text-muted-foreground">
-              Already have an account?{" "}
-              <button 
-                onClick={() => navigate('/signin')}
-                className="text-primary hover:underline focus:outline-none"
-              >
-                Sign in
-              </button>
-            </p>
+          <div className="mt-6 text-center text-sm">
+            <span className="text-muted-foreground">Already have an account? </span>
+            <Link to="/signin" className="text-primary hover:underline">
+              Sign in
+            </Link>
           </div>
         </CardContent>
       </Card>
     </div>
   );
-};
-
-export default Register; 
+} 
