@@ -15,6 +15,10 @@ interface Category {
 
 export default function ExpenseList() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [month, setMonth] = useState<number>(new Date().getMonth() + 1);
+  const [year, setYear] = useState<number>(new Date().getFullYear());
+  const [limit, setLimit] = useState<number>(20);
+  const [offset, setOffset] = useState<number>(0);
   const [stats, setStats] = useState<ExpenseStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -30,17 +34,24 @@ export default function ExpenseList() {
   });
 
   useEffect(() => {
-    fetchAllData();
-  }, [filters]);
+    fetchAllData(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters, month, year]);
 
-  const fetchAllData = async () => {
+  const fetchAllData = async (reset: boolean = false) => {
     setLoading(true);
     setError(null);
     
     try {
       console.log('Fetching data...');
+      const params = getFilterParams();
+      params.month = month;
+      params.year = year;
+      params.limit = limit;
+      params.offset = reset ? 0 : offset;
+
       const [expensesRes, statsRes, categoriesRes, dashboardRes] = await Promise.all([
-        apiService.getExpenses(getFilterParams()),
+        apiService.getExpenses(params),
         apiService.getExpenseStats(),
         apiService.getCategories(),
         apiService.getDashboardSummary()
@@ -53,10 +64,19 @@ export default function ExpenseList() {
         dashboard: dashboardRes.data
       });
 
-      setExpenses(expensesRes.data || []);
+      // Debug: Log the actual values being received
+      console.log('🔍 DEBUG - Dashboard Summary Data:', dashboardRes.data);
+      console.log('🔍 DEBUG - Total Expenses Value:', dashboardRes.data?.total_expenses);
+      console.log('🔍 DEBUG - Expected Value: 60500');
+      console.log('🔍 DEBUG - Stats Data:', statsRes.data);
+      console.log('🔍 DEBUG - Current Month Total:', statsRes.data?.current_month_total);
+
+      const newExpenses = expensesRes.data || [];
+      setExpenses(reset ? newExpenses : [...expenses, ...newExpenses]);
       setStats(statsRes.data);
       setCategories(categoriesRes.data || []);
       setDashboardSummary(dashboardRes.data);
+      setOffset((reset ? 0 : offset) + (newExpenses.length || 0));
     } catch (err: any) {
       console.error('Data fetch error:', err);
       console.error('Error details:', {
@@ -101,6 +121,10 @@ export default function ExpenseList() {
       min_amount: '',
       max_amount: '',
     });
+    setMonth(new Date().getMonth() + 1);
+    setYear(new Date().getFullYear());
+    setOffset(0);
+    fetchAllData(true);
   };
 
   const getCategoryColor = (categoryName: string) => {
@@ -211,6 +235,26 @@ export default function ExpenseList() {
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
+              <label className="text-sm font-medium">Month</label>
+              <Input
+                type="number"
+                min={1}
+                max={12}
+                value={month}
+                onChange={(e) => setMonth(parseInt(e.target.value || '1'))}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Year</label>
+              <Input
+                type="number"
+                min={2000}
+                max={2100}
+                value={year}
+                onChange={(e) => setYear(parseInt(e.target.value || `${new Date().getFullYear()}`))}
+              />
+            </div>
+            <div>
               <label className="text-sm font-medium">Category</label>
               <Select value={filters.category} onValueChange={(value) => setFilters({...filters, category: value})}>
                 <SelectTrigger>
@@ -319,6 +363,9 @@ export default function ExpenseList() {
                   </div>
                 </div>
               ))}
+              <div className="flex justify-center pt-2">
+                <Button variant="outline" onClick={() => fetchAllData(false)}>Show more</Button>
+              </div>
             </div>
           )}
         </CardContent>

@@ -10,7 +10,10 @@ import {
   Upload,
   User,
   LogOut,
-  Receipt
+  Receipt,
+  FileText,
+  CreditCard,
+  Target
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -44,13 +47,12 @@ import { Separator } from "@/components/ui/separator";
 const mainItems = [
   { title: "Dashboard", url: "/dashboard", icon: Home },
   { title: "Analytics", url: "/analytics", icon: BarChart3 },
-  { title: "Budget Planning", url: "/budget", icon: Calculator },
-  { title: "Expenses", url: "/expenses", icon: Receipt },
-  { title: "Upload Documents", url: "/upload", icon: Upload },
+  { title: "Budget Planning", url: "/budget", icon: Target },
+  { title: "Expenses", url: "/expenses", icon: CreditCard },
+  { title: "Receipt Scanner", url: "/expense-extractor", icon: Receipt },
 ];
 
 const secondaryItems = [
-  { title: "Profile", url: "/profile", icon: User },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 

@@ -11,7 +11,9 @@ import Dashboard from "./pages/Dashboard";
 import Analytics from "./pages/Analytics";
 import BudgetPage from "./pages/BudgetPage";
 import ExpensesPage from "./pages/Expenses";
-import Upload from "./pages/Upload";
+import ExpenseExtractorPage from "./pages/ExpenseExtractorPage";
+import ProfilePage from "./pages/ProfilePage";
+import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
 import Signin from "./pages/Signin";
 import Register from "./pages/Register";
@@ -19,6 +21,9 @@ import About from "./pages/About";
 import Features from "./pages/Features";
 import DataTest from "./components/DataTest";
 import ApiTest from "./components/ApiTest";
+import { AuthTest } from "./components/AuthTest";
+import { AuthDebug } from "./components/AuthDebug";
+import { AuthStatus } from "./components/AuthStatus";
 import AIChatWidget from './components/AIChatWidget';
 
 const queryClient = new QueryClient();
@@ -29,6 +34,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <AuthProvider>
+        <AuthStatus />
         <BrowserRouter
           future={{
             v7_startTransition: true,
@@ -72,17 +78,24 @@ const App = () => (
                 </AppLayout>
               </ProtectedRoute>
             } />
-            <Route path="/upload" element={
+            <Route path="/expense-extractor" element={
               <ProtectedRoute>
                 <AppLayout>
-                  <Upload />
+                  <ExpenseExtractorPage />
+                </AppLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/settings" element={
+              <ProtectedRoute>
+                <AppLayout>
+                  <SettingsPage />
                 </AppLayout>
               </ProtectedRoute>
             } />
             <Route path="/test" element={
               <ProtectedRoute>
                 <AppLayout>
-                  <DataTest />
+                  <AuthDebug />
                 </AppLayout>
               </ProtectedRoute>
             } />
@@ -93,23 +106,31 @@ const App = () => (
                 </AppLayout>
               </ProtectedRoute>
             } />
+            <Route path="/auth-test" element={
+              <ProtectedRoute>
+                <AppLayout>
+                  <AuthTest />
+                </AppLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/auth-debug" element={
+              <ProtectedRoute>
+                <AppLayout>
+                  <AuthDebug />
+                </AppLayout>
+              </ProtectedRoute>
+            } />
             <Route path="/profile" element={
               <ProtectedRoute>
                 <AppLayout>
-                  <div className="p-6">
-                    <h1 className="text-2xl font-bold">Profile Page</h1>
-                    <p className="text-muted-foreground">Coming soon...</p>
-                  </div>
+                  <ProfilePage />
                 </AppLayout>
               </ProtectedRoute>
             } />
             <Route path="/settings" element={
               <ProtectedRoute>
                 <AppLayout>
-                  <div className="p-6">
-                    <h1 className="text-2xl font-bold">Settings Page</h1>
-                    <p className="text-muted-foreground">Coming soon...</p>
-                  </div>
+                  <SettingsPage />
                 </AppLayout>
               </ProtectedRoute>
             } />

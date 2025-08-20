@@ -172,7 +172,7 @@ class Command(BaseCommand):
             user=user,
             month=timezone.now().month,
             year=timezone.now().year,
-            defaults={'amount': 200000, 'currency': 'NPR'}
+            defaults={'amount': 200000}
         )
 
         # Create some transactions
@@ -204,4 +204,4 @@ class Command(BaseCommand):
                 f'- 1 monthly income\n'
                 f'- {len(transaction_data)} transactions'
             )
-        ) 
+        )

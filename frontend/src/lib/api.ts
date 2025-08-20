@@ -45,20 +45,24 @@ apiClient.interceptors.response.use(
         const refreshToken = localStorage.getItem('refreshToken');
         if (refreshToken) {
           console.log('Attempting to refresh token...');
+          // Use apiClient.post directly to avoid infinite loop
           const response = await axios.post(`${API_BASE_URL}${API_PREFIX}/token/refresh/`, {
             refresh: refreshToken
           });
 
-          const { access } = response.data;
+          const { access, refresh } = response.data;
+          
+          // Update both tokens in localStorage
           localStorage.setItem('token', access);
-          console.log('Token refreshed successfully');
+          localStorage.setItem('refreshToken', refresh);
+          console.log('Token refreshed successfully in interceptor');
 
           // Retry the original request with new token
           originalRequest.headers.Authorization = `Bearer ${access}`;
           return apiClient(originalRequest);
         }
       } catch (refreshError) {
-        console.error('Token refresh failed:', refreshError);
+        console.error('Token refresh failed in interceptor:', refreshError);
         // If refresh fails, clear tokens and redirect to login
         localStorage.removeItem('token');
         localStorage.removeItem('refreshToken');
@@ -66,6 +70,7 @@ apiClient.interceptors.response.use(
         
         // Only redirect if we're not already on the login page
         if (window.location.pathname !== '/signin' && window.location.pathname !== '/register') {
+          console.log('Redirecting to signin page due to auth failure');
           window.location.href = '/signin';
         }
         return Promise.reject(refreshError);
@@ -130,12 +135,22 @@ export const apiService = {
   
   getProfile: () => apiClient.get(API_ENDPOINTS.PROFILE),
   
+  updateProfile: (data: { username: string; email: string; first_name?: string; last_name?: string }) =>
+    apiClient.put(API_ENDPOINTS.PROFILE, data),
+    
+  changePassword: (data: { current_password: string; new_password: string }) =>
+    apiClient.post(`${API_ENDPOINTS.PROFILE}change-password/`, data),
+  
   refreshToken: (data: { refresh: string }) =>
     apiClient.post(API_ENDPOINTS.TOKEN_REFRESH, data),
   
   // Dashboard
-  getDashboardSummary: () => apiClient.get(API_ENDPOINTS.DASHBOARD_SUMMARY),
-  getDashboardTrends: () => apiClient.get(API_ENDPOINTS.DASHBOARD_TRENDS),
+  getDashboardSummary: () => apiClient.get(API_ENDPOINTS.DASHBOARD_SUMMARY, { 
+    params: { _t: Date.now(), _v: '2.0' }
+  }),
+  getDashboardTrends: () => apiClient.get(API_ENDPOINTS.DASHBOARD_TRENDS, { 
+    params: { _t: Date.now() } 
+  }),
   
   // Budget & Categories
   getBudgetCategories: () => apiClient.get(API_ENDPOINTS.BUDGET_CATEGORIES),
@@ -152,7 +167,9 @@ export const apiService = {
     max_amount?: number;
     merchant?: string;
   }) => apiClient.get(API_ENDPOINTS.EXPENSES, { params }),
-  getExpenseStats: () => apiClient.get(API_ENDPOINTS.EXPENSE_STATS),
+  getExpenseStats: () => apiClient.get(API_ENDPOINTS.EXPENSE_STATS, { 
+    params: { _t: Date.now(), _v: '2.0' }
+  }),
   
   // Transactions
   getTransactions: () => apiClient.get(API_ENDPOINTS.TRANSACTIONS),
@@ -166,6 +183,17 @@ export const apiService = {
   // Chat
   sendChatMessage: (data: { message: string }) =>
     apiClient.post(API_ENDPOINTS.CHAT, data),
+  
+  // Expense Extraction
+  extractExpense: (formData: FormData) =>
+    apiClient.post('/api/upload-receipt/extract-expense/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  
+  extractExpensesBulk: (formData: FormData) =>
+    apiClient.post('/api/upload-receipt/extract-expenses-bulk/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
   
   // JWT Token (standard Django REST framework JWT)
   getToken: (data: { username: string; password: string }) =>
@@ -278,4 +306,4 @@ export interface PaymentMethod {
   name: string;
 }
 
-export default apiClient; 
+export default apiClient;

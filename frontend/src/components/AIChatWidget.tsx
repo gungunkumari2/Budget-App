@@ -11,7 +11,20 @@ import {
   Bot, 
   User,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  TrendingUp,
+  DollarSign,
+  PieChart,
+  Target,
+  Calendar,
+  ShoppingCart,
+  Car,
+  Utensils,
+  Home,
+  PiggyBank,
+  BarChart3,
+  Receipt,
+  Building2
 } from 'lucide-react';
 
 interface ChatMessage {
@@ -20,12 +33,55 @@ interface ChatMessage {
   timestamp?: Date;
 }
 
+const suggestedQuestions = [
+  {
+    icon: <TrendingUp className="h-4 w-4" />,
+    text: "Where did I spend the most last month?",
+    category: "spending"
+  },
+  {
+    icon: <Car className="h-4 w-4" />,
+    text: "How much did I spend on travel this year?",
+    category: "category"
+  },
+  {
+    icon: <Target className="h-4 w-4" />,
+    text: "Give me a monthly budget plan",
+    category: "budget"
+  },
+  {
+    icon: <PiggyBank className="h-4 w-4" />,
+    text: "Suggest ways to cut spending",
+    category: "savings"
+  },
+  {
+    icon: <Utensils className="h-4 w-4" />,
+    text: "What was my average food bill last 3 months?",
+    category: "average"
+  },
+  {
+    icon: <BarChart3 className="h-4 w-4" />,
+    text: "Show me my spending trends",
+    category: "trends"
+  },
+  {
+    icon: <Receipt className="h-4 w-4" />,
+    text: "What are my recent transactions?",
+    category: "transactions"
+  },
+  {
+    icon: <Building2 className="h-4 w-4" />,
+    text: "Who are my top vendors?",
+    category: "vendors"
+  }
+];
+
 export default function AIChatWidget() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: 'assistant',
-      content: 'Hello! I\'m your SmartBudget AI assistant. I can help you with:\n\n• Your income and expenses\n• Savings analysis\n• Category-wise spending\n• Budget recommendations\n• Financial tips\n\nWhat would you like to know about your finances?'
+      content: 'Hello! I\'m your comprehensive AI financial advisor with complete knowledge of your financial data. I can help you with:\n\n• Complete spending analysis with all your transactions\n• Savings tracking and recommendations\n• Category-wise spending breakdown\n• Budget monitoring and alerts\n• Spending trends and patterns\n• Vendor and merchant analysis\n• Monthly and yearly comparisons\n• Personalized financial advice\n\nI have access to all your financial data including transactions, spending history, savings patterns, and budget information. Ask me anything about your finances!'
     }
   ]);
   const [input, setInput] = useState('');
@@ -46,12 +102,13 @@ export default function AIChatWidget() {
     }
   }, [open]);
 
-  const sendMessage = async () => {
-    if (!input.trim() || loading) return;
+  const sendMessage = async (messageContent?: string) => {
+    const content = messageContent || input.trim();
+    if (!content || loading) return;
     
     const userMsg: ChatMessage = { 
       role: 'user', 
-      content: input.trim(),
+      content,
       timestamp: new Date()
     };
     
@@ -74,7 +131,7 @@ export default function AIChatWidget() {
       };
 
       const response = await axios.post('http://localhost:8000/api/upload-receipt/chat/', {
-        message: userMsg.content
+        message: content
       }, config);
       
       const aiMsg: ChatMessage = {
@@ -121,127 +178,123 @@ export default function AIChatWidget() {
     return timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  const handleSuggestedQuestion = (question: string) => {
+    sendMessage(question);
+  };
+
   return (
     <>
-      {/* Floating Button */}
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="fixed bottom-6 right-6 z-50 bg-primary text-white rounded-full shadow-lg w-14 h-14 flex items-center justify-center hover:bg-primary/90 transition-all duration-200 hover:scale-105"
-        aria-label="Open AI Chat"
+      {/* Chat Toggle Button */}
+      <Button
+        onClick={() => setOpen(!open)}
+        className="fixed bottom-4 right-4 h-12 w-12 rounded-full shadow-lg bg-primary hover:bg-primary/90"
+        size="icon"
       >
-        <MessageCircle className="h-6 w-6" />
-      </button>
+        {open ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
+      </Button>
 
-      {/* Chat Panel */}
+      {/* Chat Widget */}
       {open && (
-        <div className="fixed bottom-24 right-6 z-50 w-96 max-w-[95vw] bg-white border rounded-xl shadow-2xl flex flex-col overflow-hidden">
-          {/* Header */}
-          <CardHeader className="bg-primary text-white pb-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Bot className="h-5 w-5" />
-                <CardTitle className="text-white text-lg">SmartBudget AI</CardTitle>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setOpen(false)}
-                className="text-white hover:bg-white/20"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
+        <Card className="fixed bottom-20 right-4 w-96 h-[500px] shadow-xl border-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Bot className="h-5 w-5 text-primary" />
+              SmartBudget AI
+            </CardTitle>
           </CardHeader>
-
-          {/* Messages */}
-          <CardContent className="flex-1 p-4 overflow-y-auto max-h-96 space-y-3">
-            {messages.map((msg, i) => (
-              <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`flex items-start gap-2 max-w-[80%] ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                    msg.role === 'user' 
-                      ? 'bg-primary text-white' 
-                      : 'bg-muted text-muted-foreground'
-                  }`}>
-                    {msg.role === 'user' ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
-                  </div>
-                  <div className={`rounded-lg px-3 py-2 ${
-                    msg.role === 'user'
-                      ? 'bg-primary text-white'
-                      : 'bg-muted text-foreground'
-                  }`}>
-                    <div className="whitespace-pre-wrap text-sm">{msg.content}</div>
-                    {msg.timestamp && (
-                      <div className={`text-xs mt-1 ${
-                        msg.role === 'user' ? 'text-primary-foreground/70' : 'text-muted-foreground'
-                      }`}>
-                        {formatTime(msg.timestamp)}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-            
-            {loading && (
-              <div className="flex justify-start">
-                <div className="flex items-start gap-2">
-                  <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                    <Bot className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                  <div className="bg-muted rounded-lg px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span className="text-sm text-muted-foreground">Thinking...</span>
+          
+          <CardContent className="p-0 h-full flex flex-col">
+            {/* Messages Area */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 max-h-[300px]">
+              {messages.map((message, index) => (
+                <div
+                  key={index}
+                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div
+                    className={`max-w-[80%] rounded-lg px-3 py-2 ${
+                      message.role === 'user'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted'
+                    }`}
+                  >
+                    <div className="text-sm whitespace-pre-wrap">{message.content}</div>
+                    <div className="text-xs opacity-70 mt-1">
+                      {formatTime(message.timestamp)}
                     </div>
                   </div>
                 </div>
+              ))}
+              
+              {loading && (
+                <div className="flex justify-start">
+                  <div className="bg-muted rounded-lg px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="text-sm">AI is thinking...</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {error && (
+                <div className="flex justify-start">
+                  <div className="bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
+                    <div className="flex items-center gap-2 text-destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <span className="text-sm">{error}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Suggested Questions */}
+            {messages.length === 1 && !loading && (
+              <div className="p-4 border-t">
+                <p className="text-xs text-muted-foreground mb-2">Try asking:</p>
+                <div className="grid grid-cols-1 gap-2">
+                  {suggestedQuestions.slice(0, 4).map((question, index) => (
+                    <Button
+                      key={index}
+                      variant="outline"
+                      size="sm"
+                      className="justify-start text-left h-auto py-2 px-3"
+                      onClick={() => handleSuggestedQuestion(question.text)}
+                    >
+                      <span className="mr-2">{question.icon}</span>
+                      <span className="text-xs">{question.text}</span>
+                    </Button>
+                  ))}
+                </div>
               </div>
             )}
-            
-            <div ref={chatEndRef} />
-          </CardContent>
 
-          {/* Error Message */}
-          {error && (
-            <div className="px-4 pb-2">
-              <div className="flex items-center gap-2 p-2 bg-red-50 border border-red-200 rounded-lg">
-                <AlertCircle className="h-4 w-4 text-red-500" />
-                <span className="text-sm text-red-600">{error}</span>
+            {/* Input Area */}
+            <div className="p-4 border-t">
+              <div className="flex gap-2">
+                <Input
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  placeholder="Ask about your finances..."
+                  className="flex-1"
+                  disabled={loading}
+                />
+                <Button
+                  onClick={() => sendMessage()}
+                  disabled={loading || !input.trim()}
+                  size="icon"
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
               </div>
             </div>
-          )}
-
-          {/* Input */}
-          <div className="p-4 border-t bg-background">
-            <div className="flex gap-2">
-              <Input
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="Ask about your finances..."
-                disabled={loading}
-                className="flex-1"
-              />
-              <Button
-                onClick={sendMessage}
-                disabled={loading || !input.trim()}
-                size="sm"
-                className="px-3"
-              >
-                {loading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
-            <div className="mt-2 text-xs text-muted-foreground">
-              Press Enter to send, Shift+Enter for new line
-            </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       )}
     </>
   );

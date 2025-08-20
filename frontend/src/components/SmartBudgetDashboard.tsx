@@ -19,7 +19,7 @@ import {
   CheckCircle
 } from 'lucide-react';
 
-import { ReceiptUpload } from './ReceiptUpload';
+import { ExpenseExtractor } from './ExpenseExtractor';
 import { ExpenseChart } from './ExpenseChart';
 import { BudgetPlanner } from './BudgetPlanner';
 import { AIChat } from './AIChat';
@@ -226,7 +226,7 @@ export const SmartBudgetDashboard = () => {
           </TabsContent>
 
           <TabsContent value="upload">
-            <ReceiptUpload />
+            <ExpenseExtractor />
           </TabsContent>
 
           <TabsContent value="budget">

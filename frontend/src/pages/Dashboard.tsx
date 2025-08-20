@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { apiService } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { DollarSignIcon, TrendingUpIcon, TrendingDownIcon, CalendarIcon, ReceiptIcon } from 'lucide-react';
+import { DollarSignIcon, TrendingUpIcon, TrendingDownIcon, CalendarIcon, ReceiptIcon, RefreshCwIcon } from 'lucide-react';
 
 export default function Dashboard() {
   const [dashboardData, setDashboardData] = useState<any>(null);
@@ -13,6 +13,13 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchDashboardData();
+    // Force refresh every 5 seconds to ensure we get the latest data
+    const interval = setInterval(() => {
+      console.log('🔄 Forcing dashboard data refresh...');
+      fetchDashboardData();
+    }, 5000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const fetchDashboardData = async () => {
@@ -26,6 +33,13 @@ export default function Dashboard() {
         apiService.getBudgetCategories()
       ]);
 
+      // Debug: Log the actual values being received
+      console.log('🔍 DASHBOARD DEBUG - Summary Data:', summaryRes.data);
+      console.log('🔍 DASHBOARD DEBUG - Total Expenses Value:', summaryRes.data?.total_expenses);
+      console.log('🔍 DASHBOARD DEBUG - Expected Value: 60500');
+      console.log('🔍 DASHBOARD DEBUG - Stats Data:', statsRes.data);
+      console.log('🔍 DASHBOARD DEBUG - Current Month Total:', statsRes.data?.current_month_total);
+      
       setDashboardData(summaryRes.data);
       setExpenseStats(statsRes.data);
       setBudgetCategories(categoriesRes.data);
@@ -48,13 +62,22 @@ export default function Dashboard() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold bg-gradient-to-r from-foreground to-primary bg-clip-text text-transparent">
-          Dashboard
-        </h1>
-        <p className="text-muted-foreground mt-2">
-          Welcome back! Here's your financial overview
-        </p>
+      <div className="mb-6 flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-foreground to-primary bg-clip-text text-transparent">
+            Dashboard
+          </h1>
+          <p className="text-muted-foreground mt-2">
+            Welcome back! Here's your financial overview
+          </p>
+        </div>
+        <button 
+          onClick={fetchDashboardData}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+        >
+          <RefreshCwIcon className="h-4 w-4" />
+          Refresh Data
+        </button>
       </div>
 
       {/* Main Financial Overview */}

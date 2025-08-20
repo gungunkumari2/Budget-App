@@ -12,8 +12,11 @@ import {
   DollarSign,
   PieChart,
   Target,
-  Sparkles
+  Sparkles,
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
+import { apiService } from '@/lib/api';
 
 interface Message {
   id: string;
@@ -21,46 +24,29 @@ interface Message {
   content: string;
   timestamp: Date;
   suggestions?: string[];
+  isLoading?: boolean;
 }
 
 const quickActions = [
-  { icon: TrendingUp, label: 'Show spending trends', query: 'Show me my spending trends for this month' },
-  { icon: DollarSign, label: 'Budget analysis', query: 'Analyze my current budget performance' },
-  { icon: PieChart, label: 'Category breakdown', query: 'Break down my expenses by category' },
-  { icon: Target, label: 'Savings tips', query: 'Give me personalized savings tips' },
+  { icon: TrendingUp, label: 'Spending Analysis', query: 'Analyze my spending patterns and trends' },
+  { icon: DollarSign, label: 'Budget Review', query: 'Review my budget and suggest improvements' },
+  { icon: PieChart, label: 'Financial Health', query: 'How is my overall financial health?' },
+  { icon: Target, label: 'Smart Advice', query: 'Give me personalized financial advice' },
 ];
-
-const sampleResponses = {
-  'spending trends': {
-    content: "Based on your recent transactions, here's what I found:\n\n📈 **This Month's Trends:**\n• Food & Dining: Up 12% ($1,250)\n• Transportation: Down 5% ($850)\n• Shopping: Up 8% ($650)\n\n**Key Insights:**\n✅ You're spending less on transportation - great job!\n⚠️ Food expenses are above average - consider meal planning\n💡 Your weekend spending spikes by 40%\n\nWould you like specific tips to reduce food costs?",
-    suggestions: ['Yes, show food saving tips', 'Analyze weekend spending', 'Compare to last month']
-  },
-  'budget': {
-    content: "Here's your budget performance analysis:\n\n🎯 **Overall Performance: 85/100**\n\n**Category Status:**\n🟢 Entertainment: 75% used ($150/$200)\n🟡 Transportation: 105% used ($420/$400)\n🔴 Food: 81% used ($650/$800)\n\n**Recommendations:**\n1. You're $20 over transportation budget\n2. Great job staying under food budget!\n3. Consider reallocating $50 from food to transportation\n\nYour savings rate this month: 18.5%",
-    suggestions: ['Reallocate budgets', 'Set spending alerts', 'View savings goals']
-  },
-  'category': {
-    content: "📊 **Expense Breakdown (Last 30 days):**\n\n🍕 Food & Dining: $1,250 (35%)\n🚗 Transportation: $850 (24%)\n🛍️ Shopping: $650 (18%)\n🎬 Entertainment: $450 (13%)\n⚡ Utilities: $350 (10%)\n\n**Compared to average users:**\n• Your food spending is 15% higher\n• Transportation is 8% lower\n• Entertainment is perfectly balanced\n\n**Smart Tip:** Reducing food costs by just 10% could save you $125/month!",
-    suggestions: ['Food saving strategies', 'Compare with similar users', 'Set category alerts']
-  },
-  'savings': {
-    content: "💰 **Personalized Savings Tips for You:**\n\n**Immediate Wins (Save $280/month):**\n1. **Meal Planning** - Save $120/month\n   • Cook 3 more meals at home weekly\n   • Prep lunches on Sundays\n\n2. **Transportation Optimization** - Save $80/month\n   • Combine errands into single trips\n   • Use bike for trips under 2 miles\n\n3. **Subscription Audit** - Save $80/month\n   • Cancel unused streaming services\n   • Switch to annual plans for 15% savings\n\n**Next Level (Save $150/month):**\n• Set up automatic transfers to savings\n• Use the 24-hour rule for purchases over $50",
-    suggestions: ['Create meal plan', 'Find subscription savings', 'Set savings automation']
-  }
-};
 
 export const AIChat = () => {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
       type: 'ai',
-      content: "Hello! I'm your AI budget advisor. I can help you analyze spending, optimize budgets, and find savings opportunities. What would you like to know?",
+      content: "Hello! I'm your AI financial assistant. Ask me about your spending, budget, or any financial questions.",
       timestamp: new Date(),
-      suggestions: ['Show spending trends', 'Analyze my budget', 'Give me savings tips']
+      suggestions: ['Analyze my spending', 'Review my budget', 'Financial advice', 'Explain a concept']
     }
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [isConnected, setIsConnected] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -71,7 +57,7 @@ export const AIChat = () => {
     scrollToBottom();
   }, [messages]);
 
-  const sendMessage = (content: string) => {
+  const sendMessage = async (content: string) => {
     if (!content.trim()) return;
 
     const userMessage: Message = {
@@ -85,36 +71,63 @@ export const AIChat = () => {
     setInputValue('');
     setIsTyping(true);
 
-    // Simulate AI response
-    setTimeout(() => {
-      const aiResponse = generateAIResponse(content);
+    try {
+      // Send message to backend
+      const response = await apiService.sendChatMessage({
+        message: content
+      });
+
+      const aiResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        type: 'ai',
+        content: response.data.message,
+        timestamp: new Date(),
+        suggestions: generateSuggestions(content, response.data.message)
+      };
+
       setMessages(prev => [...prev, aiResponse]);
+      setIsConnected(true);
+    } catch (error) {
+      console.error('Chat error:', error);
+      const errorResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        type: 'ai',
+        content: "I'm having trouble connecting to my financial analysis system right now. Please try again in a moment, or you can ask me general financial questions and I'll do my best to help!",
+        timestamp: new Date(),
+        suggestions: ['Try again', 'General financial advice', 'Budget tips']
+      };
+      setMessages(prev => [...prev, errorResponse]);
+      setIsConnected(false);
+    } finally {
       setIsTyping(false);
-    }, 1500);
+    }
   };
 
-  const generateAIResponse = (userInput: string): Message => {
-    const input = userInput.toLowerCase();
+  const generateSuggestions = (userQuery: string, aiResponse: string): string[] => {
+    const query = userQuery.toLowerCase();
+    const response = aiResponse.toLowerCase();
     
-    let responseData = sampleResponses['savings']; // default
+    // Generate contextual suggestions based on the conversation
+    const suggestions = [];
     
-    if (input.includes('trend') || input.includes('spending')) {
-      responseData = sampleResponses['spending trends'];
-    } else if (input.includes('budget') || input.includes('performance')) {
-      responseData = sampleResponses['budget'];
-    } else if (input.includes('category') || input.includes('breakdown')) {
-      responseData = sampleResponses['category'];
-    } else if (input.includes('saving') || input.includes('tip')) {
-      responseData = sampleResponses['savings'];
+    if (query.includes('spending') || query.includes('expense')) {
+      suggestions.push('Show me spending trends', 'Break down by category', 'Compare to last month');
+    } else if (query.includes('budget') || query.includes('planning')) {
+      suggestions.push('Set budget goals', 'Review budget performance', 'Budget optimization tips');
+    } else if (query.includes('save') || query.includes('saving')) {
+      suggestions.push('Savings strategies', 'Emergency fund advice', 'Investment basics');
+    } else if (query.includes('income') || query.includes('earn')) {
+      suggestions.push('Income optimization', 'Side hustle ideas', 'Salary negotiation tips');
+    } else if (query.includes('debt') || query.includes('loan')) {
+      suggestions.push('Debt management strategies', 'Debt payoff methods', 'Credit score tips');
+    } else if (query.includes('invest') || query.includes('investment')) {
+      suggestions.push('Investment basics', 'Portfolio diversification', 'Risk assessment');
+    } else {
+      // General suggestions for any query
+      suggestions.push('Analyze my finances', 'Financial health check', 'Smart money tips');
     }
-
-    return {
-      id: Date.now().toString(),
-      type: 'ai',
-      content: responseData.content,
-      timestamp: new Date(),
-      suggestions: responseData.suggestions
-    };
+    
+    return suggestions.slice(0, 3);
   };
 
   const handleQuickAction = (query: string) => {
@@ -125,15 +138,51 @@ export const AIChat = () => {
     sendMessage(suggestion);
   };
 
+  const handleRetry = () => {
+    if (messages.length > 1) {
+      const lastUserMessage = messages.findLast(msg => msg.type === 'user');
+      if (lastUserMessage) {
+        sendMessage(lastUserMessage.content);
+      }
+    }
+  };
+
+  const handleClearChat = () => {
+    setMessages([{
+      id: '1',
+      type: 'ai',
+      content: "Hello! I'm your AI financial assistant. Ask me about your spending, budget, or any financial questions.",
+      timestamp: new Date(),
+      suggestions: ['Analyze my spending', 'Review my budget', 'Financial advice', 'Explain a concept']
+    }]);
+  };
+
   return (
     <Card className="h-[600px] flex flex-col">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <MessageCircle className="h-5 w-5" />
-          AI Budget Assistant
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <MessageCircle className="h-5 w-5" />
+            <CardTitle>AI Financial Assistant</CardTitle>
+            <div className="flex items-center gap-1">
+              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+              <span className="text-xs text-muted-foreground">
+                {isConnected ? 'Connected' : 'Offline'}
+              </span>
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleClearChat}
+            className="text-xs"
+          >
+            <RefreshCw className="h-3 w-3 mr-1" />
+            Clear
+          </Button>
+        </div>
         <CardDescription>
-          Ask questions about your finances and get personalized insights
+          Get precise answers about your finances
         </CardDescription>
       </CardHeader>
 
@@ -211,10 +260,9 @@ export const AIChat = () => {
                   <Bot className="h-4 w-4 text-primary" />
                 </div>
                 <div className="bg-muted p-3 rounded-lg">
-                  <div className="flex space-x-1">
-                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" />
-                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
-                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+                  <div className="flex items-center space-x-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="text-sm">Analyzing your finances...</span>
                   </div>
                 </div>
               </div>
@@ -229,14 +277,37 @@ export const AIChat = () => {
           <Input
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            placeholder="Ask about your budget, expenses, or savings..."
+            placeholder="Ask about your finances..."
             onKeyPress={(e) => e.key === 'Enter' && sendMessage(inputValue)}
             className="flex-1"
+            disabled={isTyping}
           />
-          <Button onClick={() => sendMessage(inputValue)} disabled={!inputValue.trim()}>
-            <Send className="h-4 w-4" />
+          <Button 
+            onClick={() => sendMessage(inputValue)} 
+            disabled={!inputValue.trim() || isTyping}
+          >
+            {isTyping ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
           </Button>
         </div>
+
+        {/* Connection Status */}
+        {!isConnected && (
+          <div className="mt-2 text-center">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRetry}
+              className="text-xs"
+            >
+              <RefreshCw className="h-3 w-3 mr-1" />
+              Retry Connection
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

@@ -166,3 +166,17 @@ SIMPLE_JWT = {
 
     'JTI_CLAIM': 'jti',
 }
+
+# OpenAI AI Settings
+LLM_SETTINGS = {
+    'USE_MOCK': False,  # Set to False to use OpenAI AI
+    'API_URL': 'https://api.openai.com/v1',  # OpenAI API endpoint
+    'DEFAULT_MODEL': 'gpt-3.5-turbo',  # Using GPT-3.5 Turbo model
+}
+
+# OpenAI Configuration
+# This uses OpenAI's GPT models for intelligent AI responses
+# To use OpenAI:
+# 1. Get an API key from https://platform.openai.com/api-keys
+# 2. Set environment variable: export OPENAI_API_KEY=your_api_key
+# 3. Your AI assistant will provide intelligent, accurate responses!
