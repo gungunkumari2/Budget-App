@@ -11,9 +11,14 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+import os
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load environment variables from .env file
+load_dotenv(BASE_DIR / '.env')
 
 
 # Quick-start development settings - unsuitable for production
@@ -172,6 +177,7 @@ LLM_SETTINGS = {
     'USE_MOCK': False,  # Set to False to use OpenAI AI
     'API_URL': 'https://api.openai.com/v1',  # OpenAI API endpoint
     'DEFAULT_MODEL': 'gpt-3.5-turbo',  # Using GPT-3.5 Turbo model
+    'OPENAI_API_KEY': os.getenv('OPENAI_API_KEY'),  # Get from .env file
 }
 
 # OpenAI Configuration

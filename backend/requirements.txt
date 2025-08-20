@@ -8,4 +8,5 @@ pytesseract
 easyocr
 Pillow
 pdf2image
-pandas 
+pandas
+python-dotenv==1.1.1 
