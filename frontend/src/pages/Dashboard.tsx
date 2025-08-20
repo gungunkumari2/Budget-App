@@ -13,13 +13,6 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchDashboardData();
-    // Force refresh every 5 seconds to ensure we get the latest data
-    const interval = setInterval(() => {
-      console.log('🔄 Forcing dashboard data refresh...');
-      fetchDashboardData();
-    }, 5000);
-    
-    return () => clearInterval(interval);
   }, []);
 
   const fetchDashboardData = async () => {
